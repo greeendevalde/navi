@@ -6,6 +6,7 @@
 import { decode } from './codec';
 import { keyLabel, languageKeyName, modsLabel, type LabelContext } from './labels';
 import type { KeycodeSpec } from './spec';
+import { isTaskSwitcher } from './taskSwitcher';
 import type { HoldAction } from '../project/types';
 import { t } from '../../i18n';
 
@@ -51,6 +52,7 @@ function friendlyText(spec: KeycodeSpec, v: number, ctx: LabelContext): string |
   if (d.kind === 'tap-dance') return ctx.tapDanceName?.(d.index) ?? `TD ${d.index}`;
   const lk = ctx.languageKey?.(v);
   if (lk) return languageKeyName(lk);
+  if (isTaskSwitcher(spec, v)) return t('Task switcher', 'Переключатель окон');
   const custom = ctx.customName?.(v);
   if (custom) return custom;
   switch (d.kind) {

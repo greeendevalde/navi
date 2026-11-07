@@ -1,5 +1,5 @@
 /**
- * A list of macro steps (text, tap, press, release, pause) with add / move / delete. Used by the Macros section
+ * A list of macro steps (text, secret text, tap, press, release, pause) with add / move / delete. Used by the Macros section
  * (basic keys only: VIA's macro format) and by every-tap tap dances (any keycode: played by the firmware).
  */
 import type { ReactNode } from 'react';
@@ -9,6 +9,10 @@ import type { MacroStep } from '../../core/project/types';
 import { t } from '../../i18n';
 import { deletedToast } from '../../lib/undoToast';
 import { whyDisabled } from '../../lib/whyDisabled';
+import { InfoTip } from '../InfoTip';
+import { validSecretName } from '../../core/qmk/secretText';
+import { SECRETS_HEADER_DEFAULT } from '../../core/project/factory';
+import { useProjectStore } from '../../store/projectStore';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
@@ -24,12 +28,14 @@ function StepEditor({ step, keys, onChange }: { step: MacroStep; keys: StepKeys;
       onChange={(e) => {
         const type = e.target.value as MacroStep['type'];
         if (type === 'text') onChange({ type, text: '' });
+        else if (type === 'secret') onChange({ type, name: '' });
         else if (type === 'delay') onChange({ type, ms: 100 });
         else onChange({ type, keycode: 'keycode' in step ? step.keycode : 0x04 });
       }}
       aria-label={t('Step type', 'Тип шага')}
     >
       <option value="text">{t('type text', 'набрать текст')}</option>
+      <option value="secret">{t('type secret', 'набрать секрет')}</option>
       <option value="tap">{t('tap key', 'нажать и отпустить')}</option>
       <option value="down">{t('hold key', 'зажать клавишу')}</option>
       <option value="up">{t('release key', 'отпустить клавишу')}</option>
@@ -51,6 +57,7 @@ function StepEditor({ step, keys, onChange }: { step: MacroStep; keys: StepKeys;
           spellCheck={false}
         />
       )}
+      {step.type === 'secret' && <SecretField name={step.name} onChange={(name) => onChange({ type: 'secret', name })} />}
       {isKey && (
         <KeycodeField value={step.keycode} label={t('Key', 'Клавиша')} accept={keys === 'basic' ? basicKeyOnly : undefined} onChange={(keycode) => onChange({ type: step.type, keycode })} />
       )}
@@ -60,6 +67,33 @@ function StepEditor({ step, keys, onChange }: { step: MacroStep; keys: StepKeys;
         </label>
       )}
     </div>
+  );
+}
+
+/** A secret step: the define's name (never a value) and what it does. */
+function SecretField({ name, onChange }: { name: string; onChange: (name: string) => void }) {
+  const header = useProjectStore((s) => s.project?.firmware.secretsHeader) ?? SECRETS_HEADER_DEFAULT;
+  const bad = name !== '' && !validSecretName(name);
+  return (
+    <>
+      <input
+        className="input"
+        style={{ flex: 1, minWidth: 0 }}
+        value={name}
+        onChange={(e) => onChange(e.target.value.trim())}
+        placeholder="MY_SECRET"
+        aria-label={t('Secret define name', 'Имя define секрета')}
+        aria-invalid={bad || undefined}
+        title={bad ? t('A C name: letters, digits, _; not starting with a digit or navi_', 'Имя C: буквы, цифры, _; не с цифры и не с navi_') : undefined}
+        spellCheck={false}
+      />
+      <InfoTip label={t('secret text', 'секретный текст')}>
+        {t(
+          `Types the text of a define from ${header}, a file you write yourself beside keymap.c, for example #define ${name || 'MY_SECRET'} "text". NAVI keeps only the name: the text never goes into the project, NAVI's files or its tests. Without the file or the define the step types nothing (the build log says so). The file's name is set on Firmware → keymap files.`,
+          `Набирает текст define из ${header} — файла, который вы пишете сами рядом с keymap.c, например #define ${name || 'MY_SECRET'} "текст". NAVI хранит только имя: сам текст не попадает ни в проект, ни в файлы NAVI, ни в его тесты. Без файла или define шаг ничего не набирает (лог сборки об этом скажет). Имя файла задаётся в «Прошивка → файлы keymap».`,
+        )}
+      </InfoTip>
+    </>
   );
 }
 

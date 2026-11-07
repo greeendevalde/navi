@@ -16,6 +16,7 @@ export const TAP_HOLD_KEYCODES_MAX = 64;
 export const TAP_HOLD_TERM_MIN = 10;
 export const TAP_HOLD_TERM_MAX = 5000;
 export const HOLD_ON_KEYS_MAX = 32;
+export const HOLD_ON_SPOTS_MAX = 128;
 export const KEY_LISTS_MAX = 64;
 export const KEY_LIST_KEYS_MAX = 128;
 export const KEY_LIST_NAME_MAX = 40;
@@ -171,6 +172,12 @@ export function checkTapHolds(spec: KeycodeSpec, project: Project): AdvancedIssu
     }
     if (s.holdOnKeys && s.holdOnKeys.length > HOLD_ON_KEYS_MAX) {
       err(`At most ${HOLD_ON_KEYS_MAX} “hold when pressed” keys.`, `Не больше ${HOLD_ON_KEYS_MAX} клавиш «удержание при нажатии».`);
+    }
+    if (s.holdOnSpots && s.holdOnSpots.length > HOLD_ON_SPOTS_MAX) {
+      err(`At most ${HOLD_ON_SPOTS_MAX} “hold when pressed” spots.`, `Не больше ${HOLD_ON_SPOTS_MAX} мест «удержание при нажатии».`);
+    }
+    if (s.holdOnSpots?.some((p) => p.row >= project.hardware.matrix.rows || p.col >= project.hardware.matrix.cols)) {
+      out.push({ level: 'warning', where, message: { en: 'A hold spot lies outside the matrix, so no key is there.', ru: 'Место удержания вне матрицы: там нет клавиши.' } });
     }
     for (const id of s.holdOnLists ?? []) if (!project.keyLists.some((l) => l.id === id)) err('Points to a key list that no longer exists.', 'Ссылается на список клавиш, которого больше нет.');
     for (const g of s.holdOnByLanguage ?? []) {

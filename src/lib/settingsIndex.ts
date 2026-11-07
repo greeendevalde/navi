@@ -28,6 +28,14 @@ export const PROJECT_SETTING_ITEMS: readonly SettingItem[] = [
     route: { section: 'firmware', tab: 'files' },
   },
   {
+    key: 'firmware.secretsHeader',
+    label: () => t('secrets header', 'заголовок секретов'),
+    hint: () => t('the header with the defines secret text steps type (passwords stay out of the project)', 'заголовок с define, которые набирают шаги «секретный текст» (пароли остаются вне проекта)'),
+    keywords: 'secret secrets.h password define секрет пароль',
+    section: () => `${t('Firmware', 'Прошивка')} › ${t('4 · Keymap files', '4 · Файлы keymap')}`,
+    route: { section: 'firmware', tab: 'files' },
+  },
+  {
     key: 'firmware.runTests',
     label: () => t('Run the firmware tests before flashing', 'Запускать тесты прошивки перед прошивкой'),
     hint: () => t('navi_tests.txt played in QMK’s test framework on this PC', 'navi_tests.txt проигрывается в тестовой среде QMK на этом компьютере'),
@@ -44,11 +52,27 @@ export const PROJECT_SETTING_ITEMS: readonly SettingItem[] = [
     route: { section: 'advanced', tab: 'navi' },
   },
   {
+    key: 'firmware.oneShotCancel',
+    label: () => t('A second tap cancels a one-shot modifier', 'Второе нажатие отменяет one-shot модификатор'),
+    hint: () => t('Tap a one-shot Shift (OSM) twice and the Shift is gone', 'Нажмите one-shot Shift (OSM) дважды — Shift отпускается'),
+    keywords: 'one-shot oneshot osm shift modifier cancel tap twice одноразовый модификатор отмена',
+    section: () => `${t('Advanced', 'Дополнительно')} › ${t('NAVI additions', 'Дополнения NAVI')}`,
+    route: { section: 'advanced', tab: 'navi' },
+  },
+  {
     key: 'firmware.bootloaderReboot',
     label: () => t('Let NAVI restart the keyboard into its bootloader', 'Разрешить NAVI перезагружать клавиатуру в загрузчик'),
     keywords: 'bootloader reboot загрузчик перезагрузка',
     section: () => `${t('Firmware', 'Прошивка')} › ${t('6 · Flash', '6 · Прошить')}`,
     route: { section: 'firmware', tab: 'flash' },
+  },
+  {
+    key: 'firmware.indicatorLeds',
+    label: () => t('Indicator LEDs', 'Светодиоды-индикаторы'),
+    hint: () => t('LEDs on controller pins lit by Caps Lock, Caps Word, one-shot modifiers, toggled layers or your code', 'Светодиоды на выводах контроллера: Caps Lock, Caps Word, one-shot модификаторы, включённые слои или ваш код'),
+    keywords: 'led leds indicator pin gpio caps lock caps word one-shot oneshot toggle layer светодиод индикатор пин',
+    section: () => t('Lighting', 'Подсветка'),
+    route: { section: 'lighting' },
   },
 ];
 

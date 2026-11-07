@@ -79,7 +79,7 @@ export function MacrosPage() {
 
   if (!project) return null;
   const slots = Array.from({ length: count }, (_, i) => ({ i, m: project.macros.find((x) => x.index === i) })).filter(({ i, m }) =>
-    matchesQuery(query, `MC_${i}`, m?.name, ...(m?.steps.map((s) => (s.type === 'text' ? s.text : null)) ?? [])),
+    matchesQuery(query, `MC_${i}`, m?.name, ...(m?.steps.map((s) => (s.type === 'text' ? s.text : s.type === 'secret' ? s.name : null)) ?? [])),
   );
   const macro = project.macros.find((m) => m.index === selected) ?? { id: '', index: selected, name: `M${selected}`, steps: [] };
   const issues = checkMacroSteps(selected, macro.steps);

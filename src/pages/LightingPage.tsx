@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Save, Undo2 } from 'lucide-react';
 import { Slider } from '../components/Slider';
 import { BuildLighting } from '../components/lighting/BuildLighting';
+import { IndicatorLeds } from '../components/lighting/IndicatorLeds';
 import { DILEMMA_MAX_EFFECTS, effectName, humanEffect, RGB_MATRIX_EFFECTS } from '../core/lighting/effects';
 import { featureStatus } from '../core/features/registry';
 import type { LightingState } from '../core/project/types';
@@ -344,6 +345,7 @@ export function LightingPage() {
         </div>
       )}
       <BuildLighting preset={state} />
+      <IndicatorLeds />
       <p className="field-hint" style={{ marginTop: 'var(--gap)' }}>
         {t(
           'Lighting keys (RM_*, UG_*) are in the catalog → “Lighting”. Other lighting parameters of your build (timeout, max brightness) — Advanced → QMK settings → RGB Matrix.',

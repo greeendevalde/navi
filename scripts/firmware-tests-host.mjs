@@ -52,10 +52,28 @@ try {
   const split = await play('split', 10, 6);
   check('split: a split board builds as one matrix and both halves type', split.status === 'pass' && split.passed === 1, split);
 
-  for (const [name, rows, cols] of [['generated-plain', 4, 10], ['generated-split', 10, 6]]) {
+  for (const name of ['switcher', 'switcher-on-top']) {
+    const sw = await play(name, 4, 10);
+    check(`${name}: the task switcher key opens, moves, goes back with Shift, closes and picks on the layer key's release`, sw.status === 'pass' && sw.passed === 17, sw);
+  }
+
+  for (const [name, rows, cols] of [['generated-plain', 4, 10], ['generated-split', 10, 6], ['generated-languages', 4, 10], ['generated-switcher', 4, 10], ['generated-switcher-on-top', 4, 10], ['generated-all', 10, 6]]) {
     const gen = await play(name, rows, cols);
     check(`${name}: NAVI's own navi_tests.txt passes whole on the firmware it wrote`, gen.status === 'pass' && gen.passed > 0, gen);
   }
+
+  const secret = await play('secret', 4, 10);
+  check('secret: the test build leaves the secrets header out, the macro types only its text', secret.status === 'pass' && secret.passed === 2, secret);
+  const genSecret = await play('generated-secret', 4, 10);
+  check('generated-secret: the secret macro is not checked, the rest passes', genSecret.status === 'pass' && genSecret.passed > 0, genSecret);
+
+  const ko = await play('overrides', 4, 10);
+  check('overrides: Shift overrides fire on a macro, a custom keycode with an action and CW_TOGG; the keys work alone', ko.status === 'pass' && ko.passed === 6, ko);
+  const genKo = await play('generated-overrides', 4, 10);
+  check('generated-overrides: NAVI\'s own navi_tests.txt passes whole', genKo.status === 'pass' && genKo.passed > 0, genKo);
+
+  const all = await play('all-pipeline', 10, 6);
+  check('all-pipeline: LEDs, the task switcher, a per-language key and a secret macro build together in the own pipeline', all.status === 'pass' && all.passed === 3, all);
 
   const none = await stageAndRun({ r, home: local(homeLinux), keymapDir: samples, rows: 4, cols: 10, run });
   check('a folder without navi_tests.txt: no-tests', none.status === 'no-tests', none);

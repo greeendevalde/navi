@@ -11,7 +11,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { execFile } = require('node:child_process');
 const { cancel, findMsys, findOnPath, fromWslUnc, parseWslList, qmkCommand, run, toWslUnc, validateArg, validateDistro, validatePath } = require('./runner.cjs');
-const { allowedBuildOption, insideDir, joinInside, readTextIfExists, safeFileName, safeId, unsafeSource, writeFileAtomic } = require('./safety.cjs');
+const { allowedBuildOption, insideDir, joinInside, readTextIfExists, safeFileName, safeId, stringDefinesOnly, unsafeSource, writeFileAtomic } = require('./safety.cjs');
 const { createTrustStore, scanFolders, trustDialogDetail, trustRefusal } = require('./trust.cjs');
 const { createKeymapWrites } = require('./keymapWrites.cjs');
 const { stageAndRun, testsSupported } = require('./firmwareTests.cjs');
@@ -368,13 +368,17 @@ async function checkTrust(store, home, userspace, kb, km) {
   return trustRefusal({ issues: await scanFolders(folders), trusted: store.isTrusted(folders[0]) });
 }
 
-/** Async: see readOwnCode. */
-/** `writes` (keymapWrites.cjs): each file gets `navi: true` when it is exactly what NAVI wrote there last. */
+/**
+ * Async: see readOwnCode. Only the files NAVI writes (KEYMAP_FILES) are read: the interface compares them with what
+ * it would write, and no other file (the user's secrets header) reaches it.
+ * `writes` (keymapWrites.cjs): each file gets `navi: true` when it is exactly what NAVI wrote there last.
+ */
 async function readKeymap(home, userspace, kb, km, writes = null) {
   const { dir, exists: found, root } = keymapDir(home, userspace, kb, km);
   const files = [];
   if (found) {
     for (const name of await fs.promises.readdir(dir)) {
+      if (!KEYMAP_FILES.has(name)) continue;
       const full = path.join(dir, name);
       const st = await fs.promises.stat(full);
       if (!st.isFile() || st.size > MAX_SOURCE) continue;
@@ -428,7 +432,8 @@ async function readOwnCode(home, userspace, kb, km) {
       count++;
       try {
         const text = await fs.promises.readFile(cur, 'utf8');
-        if (!text.includes('\0')) out.push({ path: prefix + rel, text });
+        // A header of string defines only (the secrets header) names no code: its text is not passed on.
+        if (!text.includes('\0') && !stringDefinesOnly(text)) out.push({ path: prefix + rel, text });
       } catch {
         /* unreadable file: skipped */
       }
@@ -700,6 +705,16 @@ async function foreignCode(folders, writes = null) {
     return `keymap folder can't be read: ${dir}`;
   }
   for (const e of entries) {
+    if (e.isFile() && !NAVI_KEYMAP_FILES.has(e.name) && e.name.endsWith('.h')) {
+      // A header of string defines only (the secrets header) can't run anything: data, not code. Its text stays here.
+      let text = null;
+      try {
+        text = await fs.promises.readFile(path.join(dir, e.name), 'utf8');
+      } catch {
+        /* unreadable: foreign below */
+      }
+      if (text !== null && stringDefinesOnly(text)) continue;
+    }
     if (!e.isFile() || !NAVI_KEYMAP_FILES.has(e.name)) return `own ${e.isDirectory() ? 'folder' : 'file'}: ${e.name}`;
     if (!NAVI_CODE_FILES.has(e.name)) continue;
     const full = path.join(dir, e.name);

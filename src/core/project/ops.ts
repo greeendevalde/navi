@@ -12,6 +12,7 @@ import { newId } from '../layout/geometry';
 import { KC_NO, KC_TRNS, makeLayer } from './factory';
 import { layerTarget } from './layerRefs';
 import { mapTapDanceKeycodes } from './tapDances';
+import { mapOwnActionKeycodes } from './languageActions';
 import type { CustomAction, EncoderAction, Geometry, HoldAction, KeyGeom, Keymap, Layer, MatrixPos, Project, TapHoldAction } from './types';
 
 // ── Access ────────────────────────────────────────────────────────────
@@ -298,7 +299,7 @@ export function mapProjectKeycodes(p: Project, fix: (v: number) => number): Proj
     firmware: p.firmware.capsWordRules ? { ...p.firmware, capsWordRules: p.firmware.capsWordRules.map((r) => ({ ...r, keys: keep(r.keys) })) } : p.firmware,
     tapHoldActions: p.tapHoldActions.map((a) => ({ ...a, tap: fix(a.tap), hold: a.hold.type === 'key' ? { type: 'key', keycode: fix(a.hold.keycode) } : a.hold })),
     leaderSequences: p.leaderSequences.map((s) => ({ ...s, action: action(s.action) })),
-    customKeycodes: p.customKeycodes.map((c) => ({ ...c, action: action(c.action) })),
+    customKeycodes: p.customKeycodes.map((c) => ({ ...c, action: mapOwnActionKeycodes(c.action, fix) })),
     languages: p.languages.map((l) => (l.osShortcut === undefined ? l : { ...l, osShortcut: fix(l.osShortcut) })),
     macros: p.macros.map((m) => ({ ...m, steps: m.steps.map((s) => (s.type === 'tap' || s.type === 'down' || s.type === 'up' ? { ...s, keycode: fix(s.keycode) } : s)) })),
   });

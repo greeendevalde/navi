@@ -49,9 +49,15 @@ spots included, as `KC_TRNS`), then one per combo and per tap dance.
 
 One line per left-out key, combo or slot, saying why: a custom keycode with no NAVI action (the user's C
 decides it), an own-C tap dance, `QK_BOOT` / `EE_CLR` / `QK_RBT` (they'd end the test), a key typed through a
-language's text route (the tests type in the first language). Also: a key whose alias C name the user's own C
-names (that code may change what it does), a VIA macro, a layer no key can turn on from power-on, a combo whose
+language's text route (the tests type in the first language, so a per-language custom keycode is tested
+with the first language's action). Also: a key whose alias C name the user's own C
+names (that code may change what it does), a VIA macro, a macro or every-tap dance step typing secret text (its
+value is in the user's secrets header, which NAVI never reads; the test build leaves that header out), a layer no
+key can turn on from power-on, a combo whose
 result is a tap dance, and a scenario whose text holds a word NAVI's file check refuses (`#include`, `incbin`).
+The task switcher key (`NAVI_TASK_SWITCH`) is tested on every layer it shows on, tapped once (`⟨C-A-TAB⟩`) and
+twice (`⟨C-A-TAB⟩⟨C-A-TAB⟩`), with `⟨ENT⟩` after the release of the layer key holding that layer; as a combo result, a
+tap dance or tap-hold slot, a key override's trigger or on a language's layer it's left out.
 The lines are for people to read; a harness skips the section.
 
 ### `[tests]`: scenarios and their expected output

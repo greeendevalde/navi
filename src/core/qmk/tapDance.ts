@@ -14,6 +14,7 @@ import type { AdvancedIssue } from '../features/advanced';
 import { TAP_DANCE_MAX_STEPS, type MacroStep, type TapDance } from '../project/types';
 import { tapDanceKind, tapOnlyDance } from '../project/tapDances';
 import { routedMacroStatements, type LanguagePlan } from './languages';
+import { isTextStep, textArg } from '../project/textSteps';
 
 export interface TapDanceC {
   /** Lines before tap_dance_actions[] (navi_send must come before them). */
@@ -38,7 +39,7 @@ const VARIANT_COND = {
   ctrl: '!(mods & MOD_MASK_SHIFT) && (mods & MOD_MASK_CTRL)',
 } as const;
 
-const hasText = (list: MacroStep[]) => list.some((s) => s.type === 'text');
+const hasText = (list: MacroStep[]) => list.some(isTextStep);
 
 /** The cases of navi_td_every_tap's switch (state->index): each dance's steps by tap count and Shift / Ctrl. */
 function everyTapBody(everyTap: TapDance[], kc: (v: number) => string, cString: (s: string) => string, lang: LanguagePlan | null, issues: AdvancedIssue[], lift: boolean): string[] {
@@ -46,7 +47,8 @@ function everyTapBody(everyTap: TapDance[], kc: (v: number) => string, cString: 
   const key = (s: MacroStep): string => {
     switch (s.type) {
       case 'text':
-        return `send_string(${cString(s.text)});`;
+      case 'secret':
+        return `send_string(${textArg(s, cString)});`;
       case 'delay':
         return `wait_ms(${s.ms});`;
       case 'tap':
@@ -61,7 +63,7 @@ function everyTapBody(everyTap: TapDance[], kc: (v: number) => string, cString: 
     const where = `TD(${t.name})`;
     const unstreamed = new Set<string>();
     const play = (list: MacroStep[], indent: string) =>
-      (lang ? routedMacroStatements(list, lang, key, cString, (s) => s.type !== 'text' && s.type !== 'delay' && unstreamed.add(kc(s.keycode))) : list.map(key)).map((l) => indent + l);
+      (lang ? routedMacroStatements(list, lang, key, cString, (s) => s.type !== 'text' && s.type !== 'secret' && s.type !== 'delay' && unstreamed.add(kc(s.keycode))) : list.map(key)).map((l) => indent + l);
     const list = (t.steps ?? []).slice(0, TAP_DANCE_MAX_STEPS);
     c.push(`        case ${t.name}:`);
     if (list.length) {

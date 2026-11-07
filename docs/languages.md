@@ -90,6 +90,13 @@ symbol keys `1`-`0` and `- = [ ] \ ; ' , . /` and the grave key type their US ch
 the computer's layout can't change them. Shift picks the shifted character (`!` for `1`). With Ctrl, Alt or GUI
 held they stay ordinary keys, for shortcuts. Held, they repeat at the auto repeat rate, one call per character.
 
+### Per-language custom keycodes
+
+A custom keycode (Advanced → Custom keycodes) can have an action per language: the keyboard picks the action of
+the language that is on (`navi_language()`) when the key fires, and a language without its own action plays the
+"other languages" one. Its text goes through the route like any other text: in a plain-keys language as key presses,
+in any other language as one `navi_type_text_user` call.
+
 ### VIA macros
 
 With VIA on, a VIA macro is read from the keyboard's memory and sent to your program in pieces of up to 32 bytes.

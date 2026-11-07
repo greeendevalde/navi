@@ -192,7 +192,9 @@ export function KeyInspector() {
                     'Tap dance runs code from keymap.c — it works only in your own firmware build (Firmware → keymap.c).',
                     'Tap dance — это код в keymap.c: работает только в вашей сборке прошивки (Прошивка → keymap.c).',
                   )
-                : t('Custom keycode: needs process_record code in the firmware.', 'Свой keycode: нужен код process_record в прошивке.')}
+                : code === 'navi'
+                  ? t('NAVI’s own key: its code is generated into keymap.c, so it works only in your own firmware build.', 'Своя клавиша NAVI: её код генерируется в keymap.c, поэтому она работает только в вашей сборке прошивки.')
+                  : t('Custom keycode: needs process_record code in the firmware.', 'Свой keycode: нужен код process_record в прошивке.')}
             </p>
           )}
         </div>

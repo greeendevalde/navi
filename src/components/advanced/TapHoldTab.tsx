@@ -34,6 +34,7 @@ import { EmptyState } from '../EmptyState';
 import { Hint, InfoTip } from '../InfoTip';
 import { useProjectStore, useSpec } from '../../store/projectStore';
 import { IssueList, KeyChips, type KeyChip } from './common';
+import { HoldSpots } from './HoldSpots';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 // The number columns match .input--num (76px); the keys wrap their chips. Hold keys get their own line under the row.
@@ -491,6 +492,26 @@ export function TapHoldTab({ project }: { project: Project }) {
                             </select>
                           )
                         }
+                      />
+                    </div>
+                    <div className="row-sub">
+                      <span className="kicker">
+                        <Hint
+                          tip={t(
+                            'Pressing a key at one of these places while this key is down makes it a hold at once, whatever that key types on the current layer. Typical: all keys of the other hand, so a thumb layer key holds as soon as an arrow key is pressed, while a key of the same hand rolled in still decides as usual. Works together with the hold keys above (either one is enough).',
+                            'Нажатие клавиши на одном из этих мест, пока эта клавиша зажата, сразу делает удержание, что бы клавиша ни печатала на текущем слое. Обычно это все клавиши другой руки: клавиша слоя под большим пальцем удерживается, как только нажата стрелка, а клавиша той же руки, нажатая вскользь, решается как обычно. Работает вместе с клавишами выше (достаточно любого условия).',
+                          )}
+                        >
+                          {t('hold when pressed · spots', 'удержание при нажатии · места')}
+                        </Hint>
+                      </span>
+                      <HoldSpots
+                        project={project}
+                        spots={s.holdOnSpots ?? []}
+                        onSet={(spots) => {
+                          const { holdOnSpots: _s, ...rest } = s;
+                          set(project.tapHolds.map((x) => (x.id === s.id ? { ...rest, ...(spots.length ? { holdOnSpots: spots } : {}) } : x)), t('tap-hold hold spots', 'места удержания тап-холд'));
+                        }}
                       />
                     </div>
                     {project.languages.map((lang) => {

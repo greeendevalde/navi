@@ -13,6 +13,7 @@ import { decode, encode, KeycodeError, toQmk } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
 import { cleanC } from '../qmk/customCode';
 import { activeKeymap } from './ops';
+import { mapOwnActionKeycodes, ownActionKeycodes } from './languageActions';
 import { mapTapDanceKeycodes, tapDanceKeycodes } from './tapDances';
 import type { HoldAction, Project, TapHoldAction } from './types';
 
@@ -88,7 +89,7 @@ export function projectKeycodeRefs(project: Project): Set<number> {
   for (const t of project.tapDances) for (const v of tapDanceKeycodes(t)) refs.add(v);
   for (const c of project.combos) refs.add(c.result);
   for (const o of project.keyOverrides) refs.add(o.trigger).add(o.replacement);
-  for (const c of project.customKeycodes) if (c.action.type === 'tap') refs.add(c.action.keycode);
+  for (const c of project.customKeycodes) for (const k of ownActionKeycodes(c.action)) refs.add(k);
   for (const s of project.leaderSequences) if (s.action.type === 'tap') refs.add(s.action.keycode);
   for (const a of project.keyAliases) refs.add(a.keycode);
   for (const s of project.tapHolds) {
@@ -141,7 +142,7 @@ export function replaceKeycode(p: Project, from: number, to: number): Project {
     tapDances: p.tapDances.map((t) => mapTapDanceKeycodes(t, f)),
     combos: p.combos.map((c) => ({ ...c, result: f(c.result) })),
     keyOverrides: p.keyOverrides.map((o) => ({ ...o, trigger: f(o.trigger), replacement: f(o.replacement) })),
-    customKeycodes: p.customKeycodes.map((c) => (c.action.type === 'tap' ? { ...c, action: { ...c.action, keycode: f(c.action.keycode) } } : c)),
+    customKeycodes: p.customKeycodes.map((c) => ({ ...c, action: mapOwnActionKeycodes(c.action, f) })),
     leaderSequences: p.leaderSequences.map((s) => (s.action.type === 'tap' ? { ...s, action: { ...s.action, keycode: f(s.action.keycode) } } : s)),
     keyAliases: p.keyAliases.map((a) => ({ ...a, keycode: f(a.keycode) })),
     tapHolds: p.tapHolds.map((s) => ({ ...s, keycodes: s.keycodes.map(f), ...(s.holdOnKeys ? { holdOnKeys: s.holdOnKeys.map(f) } : {}) })),
@@ -287,7 +288,7 @@ export function checkTapHoldActions(spec: KeycodeSpec, project: Project, ownRefs
   const onKeysOnly = new Set<number>();
   for (const c of project.combos) onKeysOnly.add(c.result);
   for (const o of project.keyOverrides) onKeysOnly.add(o.trigger).add(o.replacement);
-  for (const c of project.customKeycodes) if (c.action.type === 'tap') onKeysOnly.add(c.action.keycode);
+  for (const c of project.customKeycodes) for (const k of ownActionKeycodes(c.action)) onKeysOnly.add(k);
   for (const s of project.leaderSequences) if (s.action.type === 'tap') onKeysOnly.add(s.action.keycode);
   const seen = new Set<number>();
   project.tapHoldActions.forEach((a, i) => {

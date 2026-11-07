@@ -38,6 +38,15 @@ export function checkMacroSteps(index: number, steps: MacroStep[]): MacroIssue[]
           },
         });
       }
+    } else if (s.type === 'secret') {
+      issues.push({
+        macro: index,
+        step: i,
+        message: {
+          en: 'A secret can’t be stored in the keyboard memory (VIA): it works only in your own build without VIA, where the macro is compiled into the firmware.',
+          ru: 'Секрет нельзя хранить в памяти клавиатуры (VIA): он работает только в своей сборке без VIA, где макрос вкомпилирован в прошивку.',
+        },
+      });
     } else if (s.type === 'delay') {
       if (s.ms < 1 || s.ms > 9999) issues.push({ macro: index, step: i, message: { en: 'Delay must be 1–9999 ms', ru: 'Пауза — от 1 до 9999 мс' } });
     } else if (s.keycode < 0x04 || s.keycode > 0xff) {

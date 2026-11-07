@@ -92,6 +92,10 @@ function allowedBuildOption(name, value) {
 // Own pipeline's include of navi_rules.mk next to the makefile; copy of NAVI_RULES_INCLUDE_RE in customCode.ts.
 const NAVI_RULES_INCLUDE_RE = /^include\s+\$\(dir\s+\$\(lastword\s+\$\(MAKEFILE_LIST\)\)\)navi_rules\.mk$/;
 
+/** `__has_include("name")`: a quoted name of #include's characters (safeRelative checks the rest). */
+const SAFE_HAS_INCLUDE_RE = /\b__has_include\s*\(\s*"([A-Za-z0-9_./-]+)"\s*\)/g;
+const safeRelative = (inner) => !inner.startsWith('/') && !inner.split('/').includes('..');
+
 function unsafeSource(name, text) {
   if (/\0/.test(text)) return 'binary data';
   if (name === 'rules.mk' || name.endsWith('.mk')) {
@@ -122,13 +126,16 @@ function unsafeSource(name, text) {
   }
   if (/\.(c|h|txt)$/.test(name)) {
     const clean = cleanC(text);
-    if (/\b(incbin|__has_include|__has_include_next|__has_embed)\b/i.test(clean)) return '.incbin / __has_include';
+    // __has_include("a/b.h") with a name #include itself may take is allowed (NAVI's secrets header include): it only
+    // asks whether a file an allowed #include could reach exists. Any other form (<…>, a macro, _next) stays refused.
+    const pulls = clean.replace(SAFE_HAS_INCLUDE_RE, (m, inner) => (safeRelative(inner) ? ' ' : m));
+    if (/\b(incbin|__has_include|__has_include_next|__has_embed)\b/i.test(pulls)) return '.incbin / __has_include';
     for (const m of clean.matchAll(/^[ \t]*(?:#|%:)[ \t]*(include|include_next|import|embed)\b(.*)$/gm)) {
       const arg = m[2].trim();
       if (m[1] !== 'include') return `#${m[1]}`;
       if (arg === 'QMK_KEYBOARD_H') continue;
       const inner = /^[<"]([A-Za-z0-9_./-]+)[>"]$/.exec(arg)?.[1];
-      if (!inner || inner.startsWith('/') || inner.split('/').includes('..')) return `#include ${arg}`;
+      if (!inner || !safeRelative(inner)) return `#include ${arg}`;
     }
   }
   return null;
@@ -165,4 +172,21 @@ function cleanC(src) {
   return out;
 }
 
-module.exports = { safeId, insideDir, joinInside, writeFileAtomic, readTextIfExists, safeFileName, unsafeSource, allowedMakeVar, allowedBuildOption };
+const C_STRING = String.raw`"(?:[^"\\\n]|\\.)*"`;
+const STRING_DEFINE_RE = new RegExp(String.raw`^#\s*define\s+[A-Za-z_]\w*\s+${C_STRING}(?:\s*${C_STRING})*$`);
+const GUARD_LINE_RE = /^#\s*(?:ifndef\s+[A-Za-z_]\w*|define\s+[A-Za-z_]\w*|endif|pragma\s+once)$/;
+
+/**
+ * A header that is data only: quoted-string defines (#define NAME "…"), #pragma once, an include guard, comments.
+ * NAVI's secrets header is one; such a file can't run or name code, so the firmware tests' own-code gate passes it
+ * and the own-code read (readOwnCode) skips it, so its text never leaves the main process.
+ */
+function stringDefinesOnly(text) {
+  if (typeof text !== 'string' || text.includes('\0')) return false;
+  return cleanC(text)
+    .split('\n')
+    .map((l) => l.trim())
+    .every((l) => !l || STRING_DEFINE_RE.test(l) || GUARD_LINE_RE.test(l));
+}
+
+module.exports = { stringDefinesOnly, safeId, insideDir, joinInside, writeFileAtomic, readTextIfExists, safeFileName, unsafeSource, allowedMakeVar, allowedBuildOption };

@@ -128,12 +128,17 @@ describe('held modifiers: generator', () => {
     // a macro: one lift around it, its text steps lift nothing more
     expect(c).toContain('navi_type_text("hi", false);');
     expect(c).toContain(LIFT);
-    // the own-program route: the program's text is left alone (the lift is only for text the keyboard types)
+    // the own-program route: the program's text is left alone (the lift is only for text the keyboard types); an
+    // ASCII macro is lifted once, around all of it, when the keyboard types it (a plain-keys language)
     p.firmware = { ...p.firmware, textRoute: 'own-program' };
     const prog = keymapC(p);
     expect(prog).toContain('lift && plain');
-    expect(prog).toMatch(/navi_type_text\("hi"[^;]*, true\);/);
-    expect(prog).not.toMatch(/navi_type_text\("hi"[^;]*, false\);/);
+    expect(prog).toMatch(/uint8_t navi_held = navi_typing_plain\(\) \? navi_lift_mods\(\) : 0;\n\s+navi_type_text\("hi"[^;]*, false\);\n\s+navi_lower_mods\(navi_held\);/);
+    // text with other characters: per text, as navi_type_text decides
+    p.macros = p.macros.map((m) => ({ ...m, steps: m.steps.map((s) => (s.type === 'text' ? { ...s, text: 'привет' } : s)) }));
+    const ru = keymapC(p);
+    expect(ru).toMatch(/navi_type_text\("привет"[^;]*, true\);/);
+    expect(ru).not.toContain('navi_typing_plain() ? navi_lift_mods()');
   });
 
   it('the helper names are generated symbols the user\'s own code must not define', () => {
@@ -144,8 +149,8 @@ describe('held modifiers: generator', () => {
 });
 
 describe('held modifiers: project format', () => {
-  it('new projects lift; the schema is 18', () => {
-    expect(PROJECT_SCHEMA_VERSION).toBe(18);
+  it('new projects lift; the schema is 18 or later', () => {
+    expect(PROJECT_SCHEMA_VERSION).toBeGreaterThanOrEqual(18);
     expect(createBlankProject('x', 2, 2, false).firmware.liftHeldMods).toBe(true);
   });
 

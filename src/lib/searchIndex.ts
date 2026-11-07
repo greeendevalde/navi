@@ -12,7 +12,7 @@ import { comboRefOf } from '../core/features/advanced';
 import { aliasCName } from '../core/project/aliases';
 import { languageKeycodes } from '../core/project/languages';
 import { activeGeometry, activeKeymap } from '../core/project/ops';
-import type { Combo, CustomAction, KeyGeom, MatrixPos, Project, ProjectSummary } from '../core/project/types';
+import type { Combo, CustomKeycodeAction, KeyGeom, Language, MatrixPos, Project, ProjectSummary } from '../core/project/types';
 import { configParams, groupTitle } from '../core/qmk/configParams';
 import { bothLanguages, t } from '../i18n';
 import { customKeycodeValue } from './projectContext';
@@ -112,7 +112,15 @@ export function keyPlace(project: Project, key: KeyGeom): string {
   return half ? `${half}, ${place}` : place;
 }
 
-function actionText(spec: KeycodeSpec, action: CustomAction, ctx: LabelContext): string {
+function actionText(spec: KeycodeSpec, action: CustomKeycodeAction, ctx: LabelContext, languages: readonly Language[] = []): string {
+  if (action.type === 'by-language') {
+    // Per-language: each language's own action, then the rest's (“en: “'s” · other: “'””).
+    const own = languages.flatMap((l) => {
+      const e = action.byLanguage.find((x) => x.language === l.id);
+      return e ? [`${l.code}: ${actionText(spec, e.action, ctx) || '—'}`] : [];
+    });
+    return `${t('per language', 'по языкам')}: ${[...own, `${t('other', 'другие')}: ${actionText(spec, action.other, ctx) || '—'}`].join(' · ')}`;
+  }
   if (action.type === 'send-string') return `“${action.text}”`;
   if (action.type === 'tap') return friendlyName(spec, action.keycode, ctx).text;
   return '';
@@ -287,7 +295,7 @@ function projectItems(project: Project, spec: KeycodeSpec, ctx: LabelContext): S
   }
 
   for (const m of project.macros) {
-    const steps = m.steps.flatMap((st) => (st.type === 'text' ? [st.text] : st.type === 'delay' ? [] : [kn(st.keycode).text]));
+    const steps = m.steps.flatMap((st) => (st.type === 'text' ? [st.text] : st.type === 'secret' ? [st.name] : st.type === 'delay' ? [] : [kn(st.keycode).text]));
     out.push({
       kind: 'macro',
       title: m.name || `MC_${m.index}`,
@@ -314,7 +322,7 @@ function projectItems(project: Project, spec: KeycodeSpec, ctx: LabelContext): S
 
   project.customKeycodes.forEach((c, i) => {
     const hex = `0x${customKeycodeValue(spec, i).toString(16).toUpperCase()}`;
-    const action = actionText(spec, c.action, ctx);
+    const action = actionText(spec, c.action, ctx, project.languages);
     out.push({
       kind: 'custom',
       title: c.name,
