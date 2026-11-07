@@ -5,6 +5,7 @@
 import { featureStatus, type FeatureId, type FeatureState, type FeatureStatus, type FlagInfo, type HardwareFacts } from '../features/registry';
 import { decode, type CodecOptions } from './codec';
 import type { KeycodeSpec } from './spec';
+import { isTaskSwitcher } from './taskSwitcher';
 
 const GROUP_FEATURE: Record<string, FeatureId> = {
   system: 'extrakey',
@@ -122,7 +123,8 @@ function keycodeRequirements(spec: KeycodeSpec, value: number, options: CodecOpt
 }
 
 /** Whether own code in the firmware (keymap.c / keyboard.c) is needed for the keycode to do anything. */
-export function needsCode(spec: KeycodeSpec, value: number): 'kb' | 'user' | 'tap-dance' | null {
+export function needsCode(spec: KeycodeSpec, value: number): 'kb' | 'user' | 'tap-dance' | 'navi' | null {
+  if (isTaskSwitcher(spec, value)) return 'navi';
   const d = decode(spec, value);
   if (d.kind === 'tap-dance') return 'tap-dance';
   if (d.kind === 'named' && d.def.group === 'kb') return 'kb';

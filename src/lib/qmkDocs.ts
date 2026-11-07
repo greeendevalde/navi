@@ -41,6 +41,7 @@ export const QMK_DOCS = {
   rgblight: 'https://docs.qmk.fm/features/rgblight',
   ledMatrix: 'https://docs.qmk.fm/features/led_matrix',
   backlight: 'https://docs.qmk.fm/features/backlight',
+  ledIndicators: 'https://docs.qmk.fm/features/led_indicators',
   encoders: 'https://docs.qmk.fm/features/encoders',
   pointingDevice: 'https://docs.qmk.fm/features/pointing_device',
   howAMatrixWorks: 'https://docs.qmk.fm/how_a_matrix_works',

@@ -73,6 +73,30 @@ describe('keymap operations', () => {
     expect(k.defaultLayer).toBe(1);
   });
 
+  it('moving layers renumbers the keycodes NAVI plays or compares: override trigger, leader, own keycode actions, macro steps, OS shortcuts', () => {
+    const { p, km } = project();
+    const tap = (k: string) => ({ type: 'tap' as const, keycode: q(k) });
+    const next = moveLayer(
+      {
+        ...p,
+        keyOverrides: [{ id: 'o', name: 'ko', mods: 0x02, trigger: q('MO(2)'), replacement: q('TG(1)') }],
+        leaderSequences: [{ id: 'l', keys: [q('MO(2)')], action: tap('TG(2)') }],
+        customKeycodes: [{ id: 'c', name: 'MY_C', description: '', action: { type: 'by-language', byLanguage: [{ language: 'en', action: tap('TG(2)') }], other: tap('MO(1)') } }],
+        macros: [{ id: 'm', index: 0, name: 'm', steps: [{ type: 'down', keycode: q('MO(2)') }] }],
+        languages: [{ id: 'en', name: 'English', code: 'en', plainKeys: true, osShortcut: q('TG(2)') }],
+      },
+      km.id,
+      spec,
+      2,
+      0,
+    );
+    expect([next.keyOverrides[0].trigger, next.keyOverrides[0].replacement]).toEqual([q('MO(0)'), q('TG(2)')]);
+    expect([next.leaderSequences[0].keys[0], next.leaderSequences[0].action]).toEqual([q('MO(0)'), tap('TG(0)')]);
+    expect(next.customKeycodes[0].action).toEqual({ type: 'by-language', byLanguage: [{ language: 'en', action: tap('TG(0)') }], other: tap('MO(2)') });
+    expect(next.macros[0].steps[0]).toEqual({ type: 'down', keycode: q('MO(0)') });
+    expect(next.languages[0].osShortcut).toBe(q('TG(0)'));
+  });
+
   it('deleting a layer: references to it → KC_NO (LT → plain key), higher numbers shift', () => {
     const { p, km } = project();
     let next = setKeycodes(p, km.id, 0, [[4, 4]], q('MO(1)'));

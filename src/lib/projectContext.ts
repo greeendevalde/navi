@@ -7,6 +7,7 @@ import { caseInsensitiveLookup, type ParseContext } from '../core/keycodes/codec
 import { layerIdentifiers } from '../core/qmk/generate';
 import type { LabelContext } from '../core/keycodes/labels';
 import type { KeycodeSpec } from '../core/keycodes/spec';
+import { isTaskSwitcher, TASK_SWITCHER_NAME, taskSwitcherKeycode } from '../core/keycodes/taskSwitcher';
 import { aliasLookup } from '../core/project/aliases';
 import { languageKeycodes, languageKeyOf } from '../core/project/languages';
 import { activeGeometry, activeKeymap, customKeycodeValue } from '../core/project/ops';
@@ -37,7 +38,7 @@ export function labelContext(project: Project, spec: KeycodeSpec, settings: { os
       const m = project.macros.find((x) => x.index === i);
       return m?.name ? m.name.slice(0, 8) : undefined;
     },
-    customName: (v) => custom.get(v) ?? languageKeyCName(spec, project, v),
+    customName: (v) => custom.get(v) ?? (isTaskSwitcher(spec, v) ? TASK_SWITCHER_NAME : languageKeyCName(spec, project, v)),
     languageKey: (v) => {
       const k = languageKeyOf(spec, project, v);
       const l = k && project.languages[k.index];
@@ -63,6 +64,7 @@ export function parseContext(project: Project, spec: KeycodeSpec): ParseContext 
       if (name && !custom.has(name)) custom.set(name, v);
     }
   });
+  if (!custom.has(TASK_SWITCHER_NAME)) custom.set(TASK_SWITCHER_NAME, taskSwitcherKeycode(spec));
   const layers = new Map<string, number>();
   layerIdentifiers(km).forEach((id, i) => layers.set(id, i));
   km.layers.forEach((l, i) => l.name && !layers.has(l.name) && layers.set(l.name, i));

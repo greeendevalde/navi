@@ -24,7 +24,11 @@ export interface MacroIssue {
   message: { en: string; ru: string };
 }
 
-export function checkMacroSteps(index: number, steps: MacroStep[]): MacroIssue[] {
+/**
+ * Step checks. via (default): the macro goes to the keyboard memory (a VIA write, or a build with VIA), where a key
+ * step is one byte. Without VIA (own build) the macro is compiled C: a key step takes any keycode (qmk/playKey.ts).
+ */
+export function checkMacroSteps(index: number, steps: MacroStep[], opts: { via: boolean } = { via: true }): MacroIssue[] {
   const issues: MacroIssue[] = [];
   steps.forEach((s, i) => {
     if (s.type === 'text') {
@@ -38,8 +42,19 @@ export function checkMacroSteps(index: number, steps: MacroStep[]): MacroIssue[]
           },
         });
       }
+    } else if (s.type === 'secret') {
+      issues.push({
+        macro: index,
+        step: i,
+        message: {
+          en: 'A secret can’t be stored in the keyboard memory (VIA): it works only in your own build without VIA, where the macro is compiled into the firmware.',
+          ru: 'Секрет нельзя хранить в памяти клавиатуры (VIA): он работает только в своей сборке без VIA, где макрос вкомпилирован в прошивку.',
+        },
+      });
     } else if (s.type === 'delay') {
       if (s.ms < 1 || s.ms > 9999) issues.push({ macro: index, step: i, message: { en: 'Delay must be 1–9999 ms', ru: 'Пауза — от 1 до 9999 мс' } });
+    } else if (!opts.via) {
+      if (s.keycode < 0x04) issues.push({ macro: index, step: i, message: { en: 'Choose a key for this step.', ru: 'Выберите клавишу для этого шага.' } });
     } else if (s.keycode < 0x04 || s.keycode > 0xff) {
       issues.push({
         macro: index,

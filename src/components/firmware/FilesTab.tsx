@@ -5,6 +5,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Copy, Download, FileCode2, Save } from 'lucide-react';
 import { viaInBuild } from '../../core/qmk/generate';
+import { validSecretsHeader } from '../../core/qmk/secretText';
+import { SECRETS_HEADER_DEFAULT } from '../../core/project/factory';
 import { diffLines, diffStats } from '../../core/qmk/textDiff';
 import { generateFiles } from '../../lib/firmwareFiles';
 import { navi } from '../../desktop/bridge';
@@ -192,6 +194,36 @@ export function FilesTab() {
               />
             </label>
           )}
+          <label className="field-row" {...findAttr('setting:firmware.secretsHeader')}>
+            <span className="field-label">
+              <Hint
+                tip={t(
+                  `Secret text steps (macros, every-tap tap dances) type the defines of this header, a file you write yourself in the keymap folder: one line per secret, #define MY_SECRET "text". NAVI only includes it in keymap.c when it is there; it never reads, writes, backs up or shows it, so the text stays out of the project. Without the file the secrets type nothing.`,
+                  `Шаги «секретный текст» (макросы, tap dance «каждое нажатие») набирают define из этого заголовка — файла, который вы пишете сами в папке keymap: по строке на секрет, #define MY_SECRET "текст". NAVI только подключает его в keymap.c, если он есть; он его не читает, не пишет, не копирует и не показывает, так что текст остаётся вне проекта. Без файла секреты ничего не набирают.`,
+                )}
+              >
+                {t('secrets header', 'заголовок секретов')}
+              </Hint>
+            </span>
+            <input
+              key={project.firmware.secretsHeader}
+              className="input"
+              style={{ width: 160 }}
+              defaultValue={project.firmware.secretsHeader}
+              placeholder={SECRETS_HEADER_DEFAULT}
+              spellCheck={false}
+              onBlur={(e) => {
+                const name = e.target.value.trim() || SECRETS_HEADER_DEFAULT;
+                if (name === project.firmware.secretsHeader) return;
+                if (!validSecretsHeader(name)) {
+                  e.target.value = project.firmware.secretsHeader;
+                  toastError(t('The secrets header must be a .h file inside the keymap folder, not one NAVI writes.', 'Заголовок секретов — файл .h внутри папки keymap, не из тех, что пишет NAVI.'));
+                  return;
+                }
+                apply((p) => ({ ...p, firmware: { ...p.firmware, secretsHeader: name } }), t('secrets header', 'заголовок секретов'));
+              }}
+            />
+          </label>
           <span className="kicker">
             {project.firmware.keyboard
               ? `${keymapSources ? `${rootName} · ` : ''}keyboards/${project.firmware.keyboard}/keymaps/${project.firmware.keymap}/`

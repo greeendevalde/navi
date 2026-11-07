@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseQmk } from '../keycodes/codec';
 import { loadSpec } from '../keycodes/spec';
+import { taskSwitcherKeycode } from '../keycodes/taskSwitcher';
 import { createBlankProject } from '../project/factory';
 import { migrateProject } from '../project/migrate';
 import { activeKeymap } from '../project/ops';
@@ -135,5 +136,29 @@ describe('navi_tests.txt', () => {
     expect(validateProject(v15).project?.firmware.tests).toBe(false);
     expect(validateProject(JSON.parse(serializeProject(p))).project?.firmware.tests).toBe(true);
     expect(PROJECT_SCHEMA_VERSION).toBeGreaterThanOrEqual(16);
+  });
+});
+
+describe('the task switcher key', () => {
+  it('opens, moves with a second tap and picks with Enter when its layer key is let go', () => {
+    const sw = taskSwitcherKeycode(spec);
+    const p = board((p) => {
+      const km = activeKeymap(p);
+      km.layers[0]!.keys[7] = sw;
+      km.layers[2]!.keys[1] = sw;
+    });
+    const t = tests(file(p));
+    expect(t).toContain('r1c3 => ⟨C-A-TAB⟩');
+    expect(t).toContain('r1c3 r1c3 => ⟨C-A-TAB⟩⟨C-A-TAB⟩');
+    expect(t).toContain('+r0c3 r1c3 -r0c3 => ⟨C-A-TAB⟩⟨ENT⟩');
+    expect(t).toContain('+r1c1 wait:250 r0c1 -r1c1 => ⟨C-A-TAB⟩⟨ENT⟩');
+    expect(t).toContain('+r1c1 wait:250 r0c1 r0c1 -r1c1 => ⟨C-A-TAB⟩⟨C-A-TAB⟩⟨ENT⟩');
+    expect(section(file(p), 'keys')).toContain('key 0 r1c3 NAVI_TASK_SWITCH');
+  });
+  it('in a combo is left out', () => {
+    const p = board((p) => {
+      p.combos = [{ id: 'c', name: 'CM_SW', keys: [[0, 0], [0, 1]], result: taskSwitcherKeycode(spec) }];
+    });
+    expect(section(file(p), 'not checked').some((l) => l.startsWith('combo CM_SW: the task switcher key'))).toBe(true);
   });
 });

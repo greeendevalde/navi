@@ -18,6 +18,8 @@ import { currentTab, tabItems, tabRoute } from '../lib/sections';
 import { TabPanels, Tabs } from '../components/Tabs';
 import { useProjectStore, useSpec } from '../store/projectStore';
 import { ActionEditor, FeatureNote, IssueList, KeycodeField } from '../components/advanced/common';
+import { LanguageActionRows, perLanguageChoice } from '../components/advanced/LanguageActions';
+import { ownActionDoesSomething } from '../core/project/languageActions';
 import { TapHoldTab } from '../components/advanced/TapHoldTab';
 import { CombosTab } from '../components/advanced/CombosTab';
 import { TapDanceTab } from '../components/advanced/TapDanceTab';
@@ -26,6 +28,7 @@ import { UnicodeTab } from '../components/advanced/UnicodeTab';
 import { LanguagesTab } from '../components/advanced/LanguagesTab';
 import { LayerKeysOnTopRow } from '../components/advanced/LayerKeysOnTop';
 import { HeldModsSelect, LiftHeldModsRow } from '../components/advanced/HeldModsControls';
+import { OneShotCancelRow } from '../components/advanced/OneShotCancel';
 import { AutoRepeatRows } from '../components/advanced/AutoRepeat';
 import { CapsWordRules } from '../components/advanced/CapsWordRules';
 import { ModsInput } from '../components/keyboard/KeycodeComposer';
@@ -164,13 +167,13 @@ function CustomTab({ project }: { project: Project }) {
     <div className="page">
       <p className="field-hint">
         {t(
-          'Your own keycodes (QK_USER_0, QK_USER_1 … — SAFE_RANGE in keymap.c). The generator writes their code in process_record_user: type a string or tap a key. They appear in the catalog under “Custom”.',
-          'Свои keycodes (QK_USER_0, QK_USER_1 … — SAFE_RANGE в keymap.c). Генератор пишет их код в process_record_user: набрать строку или нажать клавишу. В каталоге — категория «Свои».',
+          'Your own keycodes (QK_USER_0, QK_USER_1 … — SAFE_RANGE in keymap.c). The generator writes their code in process_record_user: type a string or tap a key, or a different one in each language (“per language”). They appear in the catalog under “Custom”.',
+          'Свои keycodes (QK_USER_0, QK_USER_1 … — SAFE_RANGE в keymap.c). Генератор пишет их код в process_record_user: набрать строку или нажать клавишу, либо своё в каждом языке («по языкам»). В каталоге — категория «Свои».',
         )}{' '}
         <InfoTip docs={QMK_DOCS.customKeycodes} label={t('Custom keycodes', 'Свои keycodes')}>
           {t(
-            'A keycode QMK does not have: it gets a number in QMK’s free range (SAFE_RANGE). NAVI writes the code that runs when it is pressed (type text or press a key) into keymap.c; for anything else, handle it in your own C.',
-            'Keycode, которого нет в QMK: он получает номер из свободного диапазона QMK (SAFE_RANGE). NAVI пишет в keymap.c код, который выполняется при нажатии (набрать текст или нажать клавишу); для остального обработайте его в своём C.',
+            'A keycode QMK does not have: it gets a number in QMK’s free range (SAFE_RANGE). NAVI writes the code that runs when it is pressed (type text or press a key) into keymap.c; for anything else, handle it in your own C. “Per language” gives each language of Advanced → Languages its own action, picked by the language that is on when the key fires.',
+            'Keycode, которого нет в QMK: он получает номер из свободного диапазона QMK (SAFE_RANGE). NAVI пишет в keymap.c код, который выполняется при нажатии (набрать текст или нажать клавишу); для остального обработайте его в своём C. «По языкам» даёт каждому языку из Расширенное → Языки своё действие, оно выбирается по языку, включённому в момент нажатия.',
           )}
         </InfoTip>
       </p>
@@ -196,55 +199,65 @@ function CustomTab({ project }: { project: Project }) {
       {shownCustom.length > 0 && (
         <div className="panel-box rows">
           {shownCustom.map(({ c, i }) => (
-            <div key={c.id} {...findAttr('custom:' + c.id)} className="row" style={{ ['--row-cols' as string]: '72px minmax(96px,0.8fr) minmax(96px,1fr) 128px minmax(96px,1.2fr) auto auto auto' }}>
-              <span className="kicker">0x{customKeycodeValue(spec, i).toString(16).toUpperCase()}</span>
-              <input
-                className="input"
-                value={c.name}
-                onChange={(e) => patch(c.id, { name: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_') }, t('custom keycode name', 'имя keycode'), `ckname:${c.id}`)}
-                aria-label={t('Name', 'Имя')}
-              />
-              <input
-                className="input"
-                value={c.description}
-                placeholder={t('description', 'описание')}
-                onChange={(e) => patch(c.id, { description: e.target.value }, t('description', 'описание'), `ckdesc:${c.id}`)}
-              />
-              <ActionEditor action={c.action} coalesceKey={`ck:${c.id}`} onChange={(action, coalesce) => patch(c.id, { action }, t('custom action', 'действие keycode'), coalesce)} />
-              {c.action.type === 'send-string' ? (
-                <HeldModsSelect
-                  showLabel={false}
-                  value={c.action.heldMods}
-                  global={project.firmware.liftHeldMods}
-                  onChange={(heldMods) => patch(c.id, { action: { type: 'send-string', text: c.action.type === 'send-string' ? c.action.text : '', ...(heldMods ? { heldMods } : {}) } }, t('held modifiers', 'удерживаемые модификаторы'))}
-                />
-              ) : (
-                <span />
-              )}
-              <label className="checkbox" {...whyDisabled(c.action.type === 'none' && t('Pick an action first', 'Сначала выберите действие'))}>
+            <div key={c.id} {...findAttr('custom:' + c.id)} className="row-group">
+              <div className="row" style={{ ['--row-cols' as string]: '72px minmax(96px,0.8fr) minmax(96px,1fr) 128px minmax(96px,1.2fr) auto auto auto' }}>
+                <span className="kicker">0x{customKeycodeValue(spec, i).toString(16).toUpperCase()}</span>
                 <input
-                  type="checkbox"
-                  checked={c.repeat === true}
-                  onChange={(e) => c.action.type !== 'none' && patch(c.id, { repeat: e.target.checked ? true : undefined }, t('custom keycode repeat', 'повтор keycode'))}
+                  className="input"
+                  value={c.name}
+                  onChange={(e) => patch(c.id, { name: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_') }, t('custom keycode name', 'имя keycode'), `ckname:${c.id}`)}
+                  aria-label={t('Name', 'Имя')}
                 />
-                {t('repeat while held', 'повтор при удержании')}
-              </label>
-              <button
-                className="icon-btn"
-                aria-label={t('Delete', 'Удалить')}
-                onClick={() => {
-                  const { cleared } = deleteCustomKeycode(spec, project, c.id);
-                  apply((p) => deleteCustomKeycode(spec, p, c.id).project, t('delete keycode', 'удаление keycode'));
-                  const name = c.name || t('custom keycode', 'свой keycode');
-                  deletedToast(
-                    cleared > 0
-                      ? t(`${name} (${cleared} place${cleared === 1 ? '' : 's'} that used it now empty)`, `${name} (мест, где он был, теперь пусто: ${cleared})`)
-                      : name,
-                  );
-                }}
-              >
-                <Trash2 {...ICON} />
-              </button>
+                <input
+                  className="input"
+                  value={c.description}
+                  placeholder={t('description', 'описание')}
+                  onChange={(e) => patch(c.id, { description: e.target.value }, t('description', 'описание'), `ckdesc:${c.id}`)}
+                />
+                <ActionEditor
+                  action={c.action.type === 'by-language' ? c.action.other : c.action}
+                  coalesceKey={`ck:${c.id}`}
+                  extra={perLanguageChoice(project, c.action, (action) => patch(c.id, { action }, t('custom action', 'действие keycode')))}
+                  onChange={(action, coalesce) => patch(c.id, { action }, t('custom action', 'действие keycode'), coalesce)}
+                />
+                {c.action.type === 'send-string' ? (
+                  <HeldModsSelect
+                    showLabel={false}
+                    value={c.action.heldMods}
+                    global={project.firmware.liftHeldMods}
+                    onChange={(heldMods) => patch(c.id, { action: { type: 'send-string', text: c.action.type === 'send-string' ? c.action.text : '', ...(heldMods ? { heldMods } : {}) } }, t('held modifiers', 'удерживаемые модификаторы'))}
+                  />
+                ) : (
+                  <span />
+                )}
+                <label className="checkbox" {...whyDisabled(!ownActionDoesSomething(c.action) && t('Pick an action first', 'Сначала выберите действие'))}>
+                  <input
+                    type="checkbox"
+                    checked={c.repeat === true}
+                    onChange={(e) => ownActionDoesSomething(c.action) && patch(c.id, { repeat: e.target.checked ? true : undefined }, t('custom keycode repeat', 'повтор keycode'))}
+                  />
+                  {t('repeat while held', 'повтор при удержании')}
+                </label>
+                <button
+                  className="icon-btn"
+                  aria-label={t('Delete', 'Удалить')}
+                  onClick={() => {
+                    const { cleared } = deleteCustomKeycode(spec, project, c.id);
+                    apply((p) => deleteCustomKeycode(spec, p, c.id).project, t('delete keycode', 'удаление keycode'));
+                    const name = c.name || t('custom keycode', 'свой keycode');
+                    deletedToast(
+                      cleared > 0
+                        ? t(`${name} (${cleared} place${cleared === 1 ? '' : 's'} that used it now empty)`, `${name} (мест, где он был, теперь пусто: ${cleared})`)
+                        : name,
+                    );
+                  }}
+                >
+                  <Trash2 {...ICON} />
+                </button>
+              </div>
+              {c.action.type === 'by-language' && (
+                <LanguageActionRows project={project} action={c.action} keyId={c.id} onChange={(action, coalesce) => patch(c.id, { action }, t('per-language action', 'действие по языкам'), coalesce)} />
+              )}
             </div>
           ))}
         </div>
@@ -391,6 +404,14 @@ function NaviBehaviorTab({ project }: { project: Project }) {
         </div>
         <div className="panel-box rows">
           <LayerKeysOnTopRow project={project} />
+        </div>
+      </section>
+      <section className="section">
+        <div className="section-head">
+          <h2>{t('One-shot keys', 'One-shot клавиши')}</h2>
+        </div>
+        <div className="panel-box rows">
+          <OneShotCancelRow project={project} />
         </div>
       </section>
       <section className="section">

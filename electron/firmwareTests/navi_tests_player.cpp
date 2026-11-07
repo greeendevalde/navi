@@ -315,7 +315,8 @@ class Typist {
         for (int i = 0; i < 8; i++)
             if (mods & (1 << i)) s += MOD_PREFIX[i];
         char base = us_char(k, false);
-        s += base == ' ' ? std::string("␣") : base ? std::string(1, base) : key_name(k);
+        // A space inside a token stays a space (⟨G- ⟩), as NAVI's model writes it (firmwareTests.ts Typist.emit).
+        s += base ? std::string(1, base) : key_name(k);
         out += s + "⟩";
     }
 };

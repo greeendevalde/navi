@@ -8,6 +8,7 @@ import type { Keymap, Project } from '../project/types';
 import { effectiveTapHoldActions } from '../project/tapHoldActions';
 import { activeTapDanceKeycodes, tapDanceSends } from '../project/tapDances';
 import type { FeatureId } from './registry';
+import { playedKeycodes, playsAsKey } from '../qmk/playKey';
 
 export function requiredFeatures(project: Project, keymap: Keymap, spec: KeycodeSpec): Map<FeatureId, string> {
   const need = new Map<FeatureId, string>();
@@ -33,6 +34,11 @@ export function requiredFeatures(project: Project, keymap: Keymap, spec: Keycode
   for (const t of project.tapDances) {
     for (const v of activeTapDanceKeycodes(t)) keycodeNeeds(spec, v, { unicode: project.firmware.unicode }).forEach((n) => add(pick(n), 'tap dances'));
   }
+  // Keycodes tap_code16 can't send (override replacements, leader / own keycode actions, macro steps) are played as
+  // key events with record->keycode too (qmk/playKey.ts); they need their own features.
+  const played = playedKeycodes(project).filter(playsAsKey);
+  if (played.length) add('repeat_key', 'keys NAVI plays as key events');
+  for (const v of played) keycodeNeeds(spec, v, { unicode: project.firmware.unicode }).forEach((n) => add(pick(n), 'keys NAVI plays as key events'));
   if (project.combos.length) add('combo', 'combos');
   if (project.keyOverrides.length) add('key_override', 'key overrides');
   if (keymap.layers.some((l) => l.encoders.length)) add('encoder_map', 'encoders');

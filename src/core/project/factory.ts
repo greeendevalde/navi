@@ -25,6 +25,9 @@ export const LIFT_HELD_MODS_DEFAULT = true;
 /** New projects: NAVI may not restart the keyboard into its bootloader (firmware.bootloaderReboot). */
 export const BOOTLOADER_REBOOT_DEFAULT = false;
 
+/** The secrets header's name in new projects and older files (firmware.secretsHeader). */
+export const SECRETS_HEADER_DEFAULT = 'secrets.h';
+
 /** New projects: no firmware tests file (firmware.tests). */
 export const FIRMWARE_TESTS_DEFAULT = false;
 
@@ -121,9 +124,12 @@ export function createProject({ name, hardware, geometry, layers = 4, encoderCou
       buildConfig: {},
       layerKeysOnTop: LAYER_KEYS_ON_TOP_DEFAULT,
       liftHeldMods: LIFT_HELD_MODS_DEFAULT,
+      oneShotCancel: false,
       bootloaderReboot: BOOTLOADER_REBOOT_DEFAULT,
       tests: FIRMWARE_TESTS_DEFAULT,
       runTests: false,
+      secretsHeader: SECRETS_HEADER_DEFAULT,
+      indicatorLeds: [],
       autoRepeat: { ...AUTO_REPEAT_DEFAULT },
       textRoute: TEXT_ROUTE_DEFAULT,
     },

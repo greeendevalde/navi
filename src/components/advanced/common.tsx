@@ -306,21 +306,47 @@ export function FeatureNote({ project, feature, firstUse }: { project: Project; 
   );
 }
 
-/** Action: type a string (SEND_STRING) / press a key (tap_code16) / nothing. */
-export function ActionEditor({ action, onChange, coalesceKey }: { action: CustomAction; onChange: (a: CustomAction, coalesce?: string) => void; coalesceKey: string }) {
+/** One more choice in an ActionEditor's list (per language; as the other languages): `on` shows it picked. */
+export interface ActionChoice {
+  value: string;
+  label: string;
+  on: boolean;
+  /** Why it can't be picked (whyDisabled). */
+  reason?: string | false;
+  onPick: () => void;
+  /** What the second cell says while it's picked. */
+  hint: string;
+}
+
+/** Action: type a string (SEND_STRING) / press a key (tap_code16) / nothing (/ `extra`). */
+export function ActionEditor({ action, onChange, coalesceKey, extra }: { action: CustomAction; onChange: (a: CustomAction, coalesce?: string) => void; coalesceKey: string; extra?: ActionChoice }) {
   return (
     <>
       <select
         className="select"
-        value={action.type}
-        onChange={(e) => onChange(e.target.value === 'send-string' ? { type: 'send-string', text: '' } : e.target.value === 'tap' ? { type: 'tap', keycode: 0x04 } : { type: 'none' })}
+        value={extra?.on ? extra.value : action.type}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (extra && v === extra.value) {
+            if (!extra.reason) extra.onPick();
+            return;
+          }
+          onChange(v === 'send-string' ? { type: 'send-string', text: '' } : v === 'tap' ? { type: 'tap', keycode: 0x04 } : { type: 'none' });
+        }}
         aria-label={t('Action', 'Действие')}
       >
         <option value="none">{t('no code', 'без кода')}</option>
         <option value="send-string">{t('type text', 'набрать текст')}</option>
         <option value="tap">{t('press a key', 'нажать клавишу')}</option>
+        {extra && (
+          <option value={extra.value} {...whyDisabled(extra.reason)}>
+            {extra.label}
+          </option>
+        )}
       </select>
-      {action.type === 'send-string' ? (
+      {extra?.on ? (
+        <span className="field-hint">{extra.hint}</span>
+      ) : action.type === 'send-string' ? (
         <input
           className="input"
           value={action.text}

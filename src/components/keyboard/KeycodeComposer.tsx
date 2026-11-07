@@ -7,7 +7,7 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import { decode, encode, LAYER_FN_RANGES, type Decoded, type LayerFn } from '../../core/keycodes/codec';
 import type { KeycodeSpec } from '../../core/keycodes/spec';
 import type { HoldAction, Project } from '../../core/project/types';
-import { ensureTapHold, plainTapHold, tapHoldSlots } from '../../core/project/tapHoldActions';
+import { ensureTapHold, holdProblem, plainTapHold, slotProblem, tapHoldSlots } from '../../core/project/tapHoldActions';
 import { basicKeyOnly, CharInput, KeycodeField } from '../advanced/common';
 import { activeKeymap } from '../../core/project/ops';
 import { reservedStandInBases } from '../../lib/keymapActions';
@@ -223,6 +223,9 @@ export function KeycodeComposer({ spec, project, value, onChange, onTapHold }: C
       if (useEditorStore.getState().selection !== selection)
         return setError(t('The selection changed while your own code was read: pick the hold action again.', 'Выбор клавиш изменился, пока читался ваш код: выберите действие удержания ещё раз.'));
     }
+    // A slot that can't hold this key: say why, right at the fields (the same text ensureTapHold would throw).
+    const problem = plain === null || clash ? (slotProblem(spec, tap, 'tap') ?? holdProblem(spec, hold)) : null;
+    if (problem) return setError(t(problem.en, problem.ru));
     try {
       if (plain === null || clash) ensureTapHold(spec, project, tap, hold, reservedStandInBases(spec, project)); // the slot errors
     } catch (err) {

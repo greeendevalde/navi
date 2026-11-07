@@ -10,9 +10,11 @@ import { newId } from '../layout/geometry';
 import { allowedMakeVar, checkCustom, CUSTOM_FILES, CUSTOM_MAX, MAKE_VALUE_RE, PIPELINE_MAX_HEADERS, safeHeaderName, unsafeDefineValue, validCIdentifier } from '../qmk/customCode';
 import { ALIAS_LABEL_MAX, KEY_ALIASES_MAX } from './aliases';
 import { CAPS_WORD_KEYS_MAX, CAPS_WORD_RULES_MAX } from './capsWord';
-import { HOLD_ON_KEYS_MAX, KEY_LIST_KEYS_MAX, KEY_LIST_NAME_MAX, KEY_LISTS_MAX, TAP_HOLD_FLAVORS, TAP_HOLD_KEYCODES_MAX, TAP_HOLD_MAX, TAP_HOLD_TERM_MAX, TAP_HOLD_TERM_MIN } from './tapHolds';
+import { INDICATOR_LEDS_MAX, INDICATOR_STATES } from './indicatorLeds';
+import { HOLD_ON_KEYS_MAX, HOLD_ON_SPOTS_MAX, KEY_LIST_KEYS_MAX, KEY_LIST_NAME_MAX, KEY_LISTS_MAX, TAP_HOLD_FLAVORS, TAP_HOLD_KEYCODES_MAX, TAP_HOLD_MAX, TAP_HOLD_TERM_MAX, TAP_HOLD_TERM_MIN } from './tapHolds';
 import { TAP_HOLD_ACTIONS_MAX } from './tapHoldActions';
-import { AUTO_REPEAT_DEFAULT, AUTO_REPEAT_LIMITS, TEXT_ROUTE_DEFAULT } from './factory';
+import { AUTO_REPEAT_DEFAULT, AUTO_REPEAT_LIMITS, SECRETS_HEADER_DEFAULT, TEXT_ROUTE_DEFAULT } from './factory';
+import { validSecretsHeader } from '../qmk/secretText';
 import { LANGUAGE_CODE_RE, LANGUAGE_NAME_MAX, LANGUAGES_MAX } from './languages';
 import { migrateProject } from './migrate';
 import {
@@ -23,10 +25,15 @@ import {
   type CustomAction,
   type CustomKeycode,
   type CapsWordRule,
+  type IndicatorLed,
+  type IndicatorState,
   type KeyAlias,
   type TapHoldSetting,
   type KeyList,
   type Language,
+  type KeySpot,
+  type CustomKeycodeAction,
+  type LanguageActionEntry,
   type LanguageHoldKeys,
   TEXT_ROUTES,
   type HoldAction,
@@ -414,10 +421,20 @@ function readMacroStep(r: Reader, v: unknown, path: string): MacroStep | null {
       return { type: o.type, keycode: r.keycode(o.keycode, `${path}.keycode`) };
     case 'delay':
       return { type: 'delay', ms: r.num(o.ms, `${path}.ms`, 0, 60000, 0) };
+    case 'secret':
+      // Only the define's name: a bad one is kept (so it can be fixed) and refused by the generator (checkSecrets).
+      return { type: 'secret', name: r.str(o.name, `${path}.name`, '', 64) };
     default:
       r.error(`${path}.type`, 'unknown macro step');
       return null;
   }
+}
+
+/** firmware.secretsHeader: a bad or missing name falls back to the default with a warning. */
+function readSecretsHeader(r: Reader, v: unknown): string {
+  if (typeof v === 'string' && validSecretsHeader(v)) return v;
+  if (v !== undefined) r.warn('firmware.secretsHeader', `must be a .h file inside the keymap folder, not one NAVI writes — ${SECRETS_HEADER_DEFAULT} used`);
+  return SECRETS_HEADER_DEFAULT;
 }
 
 /** Tap dance kind and its fields (every-tap steps, own C functions); undefined ones stay undefined. */
@@ -533,6 +550,35 @@ function readCapsWordRules(r: Reader, v: unknown, listIds: ReadonlySet<string>, 
   return out;
 }
 
+/** Indicator LEDs: a malformed LED or state is dropped with a warning; the pin is kept as typed (the generator checks it). */
+function readIndicatorLeds(r: Reader, v: unknown): IndicatorLed[] {
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v)) {
+    r.warn('firmware.indicatorLeds', 'expected an array — dropped');
+    return [];
+  }
+  if (v.length > INDICATOR_LEDS_MAX) r.warn('firmware.indicatorLeds', `too many LEDs (${v.length} > ${INDICATOR_LEDS_MAX}) — the rest is dropped`);
+  const out: IndicatorLed[] = [];
+  v.slice(0, INDICATOR_LEDS_MAX).forEach((x, i) => {
+    const p = `firmware.indicatorLeds[${i}]`;
+    if (typeof x !== 'object' || x === null || Array.isArray(x)) return r.warn(p, 'expected an object — dropped');
+    const o = x as Record<string, unknown>;
+    const states: IndicatorState[] = [];
+    (Array.isArray(o.states) ? o.states : []).forEach((s, j) => {
+      if ((INDICATOR_STATES as readonly unknown[]).includes(s) && !states.includes(s as IndicatorState)) states.push(s as IndicatorState);
+      else r.warn(`${p}.states[${j}]`, 'unknown or repeated state — dropped');
+    });
+    out.push({
+      id: r.id(o.id, `${p}.id`, 'led'),
+      side: r.oneOf(o.side, `${p}.side`, ['left', 'right'] as const, 'left'),
+      pin: r.str(o.pin, `${p}.pin`, '', 8).toUpperCase(),
+      activeLow: r.bool(o.activeLow ?? false, `${p}.activeLow`, false),
+      states,
+    });
+  });
+  return out;
+}
+
 function readFirmware(r: Reader, v: unknown): FirmwareConfig {
   const o = r.obj(v ?? {}, 'firmware');
   const keyboard = o.keyboard === null || o.keyboard === undefined ? null : r.str(o.keyboard, 'firmware.keyboard', '', 200);
@@ -606,9 +652,12 @@ function readFirmware(r: Reader, v: unknown): FirmwareConfig {
     pipeline,
     layerKeysOnTop: r.bool(o.layerKeysOnTop ?? false, 'firmware.layerKeysOnTop', false),
     liftHeldMods: r.bool(o.liftHeldMods ?? true, 'firmware.liftHeldMods', true),
+    oneShotCancel: r.bool(o.oneShotCancel ?? false, 'firmware.oneShotCancel', false),
     bootloaderReboot: r.bool(o.bootloaderReboot ?? false, 'firmware.bootloaderReboot', false),
     tests: r.bool(o.tests ?? false, 'firmware.tests', false),
     runTests: r.bool(o.runTests ?? false, 'firmware.runTests', false),
+    secretsHeader: readSecretsHeader(r, o.secretsHeader),
+    indicatorLeds: readIndicatorLeds(r, o.indicatorLeds),
     autoRepeat: {
       delay: r.num(ar.delay, 'firmware.autoRepeat.delay', AUTO_REPEAT_LIMITS.delay.min, AUTO_REPEAT_LIMITS.delay.max, AUTO_REPEAT_DEFAULT.delay),
       rate: r.num(ar.rate, 'firmware.autoRepeat.rate', AUTO_REPEAT_LIMITS.rate.min, AUTO_REPEAT_LIMITS.rate.max, AUTO_REPEAT_DEFAULT.rate),
@@ -710,20 +759,6 @@ export function validateProject(input: unknown): { project: Project | null; issu
       layers: ko.layers === undefined ? undefined : r.arr(ko.layers, `${p}.layers`, 32).map((l, j) => r.num(l, `${p}.layers[${j}]`, 0, 31, 0)),
     };
   });
-  const customKeycodes: CustomKeycode[] = r.arr(o.customKeycodes, 'customKeycodes', 64).map((c, i) => {
-    const p = `customKeycodes[${i}]`;
-    const co = r.obj(c, p);
-    const name = r.str(co.name, `${p}.name`, `CUSTOM_${i}`, 64);
-    if (!/^[A-Z_][A-Z0-9_]*$/.test(name)) r.error(`${p}.name`, 'name must be an UPPER_CASE C identifier');
-    const ao = r.obj(co.action ?? { type: 'none' }, `${p}.action`);
-    const action =
-      ao.type === 'send-string'
-        ? { type: 'send-string' as const, text: r.str(ao.text, `${p}.action.text`, '', 1000), ...readHeldMods(r, ao.heldMods, `${p}.action.heldMods`) }
-        : ao.type === 'tap'
-          ? { type: 'tap' as const, keycode: r.keycode(ao.keycode, `${p}.action.keycode`) }
-          : { type: 'none' as const };
-    return { id: r.id(co.id, `${p}.id`, 'ck'), name, description: r.str(co.description, `${p}.description`, '', 300), action, ...(co.repeat === true ? { repeat: true } : {}) };
-  });
   const keyAliases: KeyAlias[] = r.arr(o.keyAliases ?? [], 'keyAliases', KEY_ALIASES_MAX).map((a, i) => {
     const p = `keyAliases[${i}]`;
     const ao = r.obj(a, p);
@@ -748,6 +783,36 @@ export function validateProject(input: unknown): { project: Project | null; issu
     return out;
   });
   const languageIds = new Set(languages.map((l) => l.id));
+  // An own keycode's action; a per-language one keeps only entries of languages in the list (one each).
+  const readOwnAction = (v: unknown, p: string): CustomAction => {
+    const ao = r.obj(v ?? { type: 'none' }, p);
+    if (ao.type === 'send-string') return { type: 'send-string', text: r.str(ao.text, `${p}.text`, '', 1000), ...readHeldMods(r, ao.heldMods, `${p}.heldMods`) };
+    if (ao.type === 'tap') return { type: 'tap', keycode: r.keycode(ao.keycode, `${p}.keycode`) };
+    return { type: 'none' };
+  };
+  const customKeycodes: CustomKeycode[] = r.arr(o.customKeycodes, 'customKeycodes', 64).map((c, i) => {
+    const p = `customKeycodes[${i}]`;
+    const co = r.obj(c, p);
+    const name = r.str(co.name, `${p}.name`, `CUSTOM_${i}`, 64);
+    if (!/^[A-Z_][A-Z0-9_]*$/.test(name)) r.error(`${p}.name`, 'name must be an UPPER_CASE C identifier');
+    const ao = r.obj(co.action ?? { type: 'none' }, `${p}.action`);
+    let action: CustomKeycodeAction;
+    if (ao.type === 'by-language') {
+      const seen = new Set<string>();
+      const byLanguage = r.arr(ao.byLanguage ?? [], `${p}.action.byLanguage`, LANGUAGES_MAX).flatMap((e, j): LanguageActionEntry[] => {
+        const ep = `${p}.action.byLanguage[${j}]`;
+        const eo = r.obj(e, ep);
+        if (typeof eo.language !== 'string' || !languageIds.has(eo.language) || seen.has(eo.language)) {
+          r.warn(`${ep}.language`, 'unknown or repeated language, this action is dropped');
+          return [];
+        }
+        seen.add(eo.language);
+        return [{ language: eo.language, action: readOwnAction(eo.action, `${ep}.action`) }];
+      });
+      action = { type: 'by-language', byLanguage, other: readOwnAction(ao.other, `${p}.action.other`) };
+    } else action = readOwnAction(ao, `${p}.action`);
+    return { id: r.id(co.id, `${p}.id`, 'ck'), name, description: r.str(co.description, `${p}.description`, '', 300), action, ...(co.repeat === true ? { repeat: true } : {}) };
+  });
   const tapHolds: TapHoldSetting[] = r.arr(o.tapHolds ?? [], 'tapHolds', TAP_HOLD_MAX).map((x, i) => {
     const p = `tapHolds[${i}]`;
     const to = r.obj(x, p);
@@ -784,6 +849,19 @@ export function validateProject(input: unknown): { project: Project | null; issu
         return [{ language: go.language, keys, ...(lists.length ? { lists } : {}) }];
       });
       if (groups.length) out.holdOnByLanguage = groups;
+    }
+    if (to.holdOnSpots !== undefined && to.holdOnSpots !== null) {
+      const seenSpots = new Set<number>();
+      const spots = r.arr(to.holdOnSpots, `${p}.holdOnSpots`, HOLD_ON_SPOTS_MAX).flatMap((x, j): KeySpot[] => {
+        const sp = `${p}.holdOnSpots[${j}]`;
+        const so = r.obj(x, sp);
+        const spot = { row: r.num(so.row, `${sp}.row`, 0, 255, 0), col: r.num(so.col, `${sp}.col`, 0, 255, 0) };
+        const id = (spot.row << 8) | spot.col;
+        if (seenSpots.has(id)) return [];
+        seenSpots.add(id);
+        return [spot];
+      });
+      if (spots.length) out.holdOnSpots = spots;
     }
     return out;
   });

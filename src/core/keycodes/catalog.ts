@@ -8,6 +8,7 @@ import type { Text } from '../features/registry';
 import { encode, MOD_BITS, type LayerFn } from './codec';
 import { keyLabel, languageKeyName, type LabelContext } from './labels';
 import type { KeycodeDef, KeycodeSpec } from './spec';
+import { TASK_SWITCHER_NAME, taskSwitcherKeycode } from './taskSwitcher';
 
 export type CategoryId =
   | 'basic'
@@ -209,6 +210,9 @@ export function buildCatalog(spec: KeycodeSpec, ctx: CatalogContext): CatalogIte
   for (const mods of [0x01, 0x02, 0x04, 0x08, 0x11, 0x12, 0x14, 0x18, 0x07, 0x0f]) {
     out.push(item(spec, encode(spec, { kind: 'one-shot-mod', mods }), 'one-shot', ctx, 'osm one shot'));
   }
+
+  // NAVI's task switcher key (Windows' Ctrl+Alt+Tab switcher), beside the arrows it is used with.
+  out.push(item(spec, taskSwitcherKeycode(spec), 'navigation', ctx, `${TASK_SWITCHER_NAME} task switcher alt tab window windows переключатель окон окна`));
 
   // The project's tap dances.
   for (const td of ctx.tapDances ?? []) {

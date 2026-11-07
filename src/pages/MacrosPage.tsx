@@ -2,7 +2,7 @@
  * MACROS SECTION: macro slots (MC_0 … MC_n), a visual step editor
  * (text, tap, press, release, pause), recording from the keyboard,
  * used space in the keyboard memory and the firmware format limits (ASCII text,
- * only basic keys, pauses up to 9999 ms).
+ * only basic keys with VIA, any keycode without, pauses up to 9999 ms).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Square } from 'lucide-react';
@@ -79,10 +79,11 @@ export function MacrosPage() {
 
   if (!project) return null;
   const slots = Array.from({ length: count }, (_, i) => ({ i, m: project.macros.find((x) => x.index === i) })).filter(({ i, m }) =>
-    matchesQuery(query, `MC_${i}`, m?.name, ...(m?.steps.map((s) => (s.type === 'text' ? s.text : null)) ?? [])),
+    matchesQuery(query, `MC_${i}`, m?.name, ...(m?.steps.map((s) => (s.type === 'text' ? s.text : s.type === 'secret' ? s.name : null)) ?? [])),
   );
   const macro = project.macros.find((m) => m.index === selected) ?? { id: '', index: selected, name: `M${selected}`, steps: [] };
-  const issues = checkMacroSteps(selected, macro.steps);
+  const viaBuild = project.firmware.buildFeatures.via === true;
+  const issues = checkMacroSteps(selected, macro.steps, { via: viaBuild });
   const update = (fn: (m: Macro) => Macro, label: string, coalesce?: string) => apply((p) => ({ ...p, macros: patchMacros(p.macros, selected, fn) }), label, coalesce ? { coalesce } : undefined);
   const setSteps = (steps: MacroStep[], label: string, coalesce?: string) => update((m) => ({ ...m, steps }), label, coalesce);
 
@@ -105,15 +106,25 @@ export function MacrosPage() {
   return (
     <div className="page">
       <p className="page-lead">
-        {t(
-          'Macros live in the keyboard memory (VIA) and run by keys MC_0 … MC_n. The firmware types text as US-layout keys, presses only basic keys and waits at most 9999 ms per pause.',
-          'Макросы хранятся в памяти клавиатуры (VIA) и запускаются клавишами MC_0 … MC_n. Прошивка набирает текст как американские клавиши, нажимает только простые клавиши и ждёт не больше 9999 мс за паузу.',
-        )}{' '}
+        {viaBuild
+          ? t(
+              'Macros live in the keyboard memory (VIA) and run by keys MC_0 … MC_n. The firmware types text as US-layout keys, presses only basic keys and waits at most 9999 ms per pause.',
+              'Макросы хранятся в памяти клавиатуры (VIA) и запускаются клавишами MC_0 … MC_n. Прошивка набирает текст как американские клавиши, нажимает только простые клавиши и ждёт не больше 9999 мс за паузу.',
+            )
+          : t(
+              'Macros run by keys MC_0 … MC_n. Your build has no VIA, so they are compiled into the firmware: a key step can be any keycode (a layer key, a tap dance, an own keycode…). The firmware types text as US-layout keys and waits at most 9999 ms per pause.',
+              'Макросы запускаются клавишами MC_0 … MC_n. В вашей сборке нет VIA, поэтому они встроены в прошивку: шаг-клавиша может быть любым кодом (клавиша слоя, tap dance, своя клавиша…). Прошивка набирает текст как американские клавиши и ждёт не больше 9999 мс за паузу.',
+            )}{' '}
         <InfoTip label={t('macros', 'макросы')}>
-          {t(
-            'These are the keyboard’s own (VIA) macros: they are stored in the keyboard and replayed by the firmware, so they work on any computer. MC_0 is the first slot; put its key on a layer to run it. Macros that need more than basic keys (for example other layers or tap dances) are not made here.',
-            'Это собственные макросы клавиатуры (VIA): они хранятся в ней и воспроизводятся прошивкой, поэтому работают на любом компьютере. MC_0 — первая ячейка; поставьте её клавишу на слой, чтобы запускать. Макросы с чем-то сложнее простых клавиш (например, слоями или tap dance) здесь не делаются.',
-          )}
+          {viaBuild
+            ? t(
+                'These are the keyboard’s own (VIA) macros: they are stored in the keyboard and replayed by the firmware, so they work on any computer. MC_0 is the first slot; put its key on a layer to run it. VIA stores each key as one byte, so a step presses only basic keys; with the VIA tick off (Firmware → Keymap files) a step takes any keycode.',
+                'Это собственные макросы клавиатуры (VIA): они хранятся в ней и воспроизводятся прошивкой, поэтому работают на любом компьютере. MC_0 — первая ячейка; поставьте её клавишу на слой, чтобы запускать. VIA хранит каждую клавишу одним байтом, поэтому шаг нажимает только простые клавиши; с выключенной галочкой VIA (Прошивка → Файлы keymap) шаг принимает любой код.',
+              )
+            : t(
+                'The firmware plays these macros itself, so they work on any computer. MC_0 is the first slot; put its key on a layer to run it. A key step that is not a plain key is pressed like a key of the keymap.',
+                'Прошивка сама воспроизводит эти макросы, поэтому они работают на любом компьютере. MC_0 — первая ячейка; поставьте её клавишу на слой, чтобы запускать. Шаг-клавиша, которая не простая клавиша, нажимается как клавиша раскладки.',
+              )}
         </InfoTip>
       </p>
       <div className="toolbar">
@@ -210,7 +221,7 @@ export function MacrosPage() {
           <div className="panel-box-body field">
             <MacroSteps
               steps={macro.steps}
-              keys="basic"
+              keys={viaBuild ? 'basic' : 'any'}
               emptyHint={
                 <EmptyState
                   what={t('A macro types its steps in order when you press its MC key: keys, text and pauses.', 'Макрос по нажатию своей клавиши MC выполняет шаги по порядку: клавиши, текст и паузы.')}

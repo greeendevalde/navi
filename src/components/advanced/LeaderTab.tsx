@@ -6,6 +6,10 @@ import { useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { checkLeaderSequences } from '../../core/features/advanced';
 import { parseKeySequence, sequenceText } from '../../core/keycodes/sequence';
+import type { NameContext } from '../../core/keycodes/codec';
+import { layerIdentifiers } from '../../core/qmk/generate';
+import { activeKeymap, customKeycodeValue } from '../../core/project/ops';
+import { parseContext } from '../../lib/projectContext';
 import { newId } from '../../core/layout/geometry';
 import type { LeaderSequence, Project } from '../../core/project/types';
 import { href } from '../../lib/router';
@@ -23,14 +27,24 @@ import { useKeyWords } from '../../lib/keyFind';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
-function SequenceInput({ seq, onChange }: { seq: LeaderSequence; onChange: (keys: number[]) => void }) {
+function SequenceInput({ seq, project, onChange }: { seq: LeaderSequence; project: Project; onChange: (keys: number[]) => void }) {
   const spec = useSpec();
+  const parseCtx = useMemo(() => parseContext(project, spec), [project, spec]);
+  const nameCtx = useMemo<NameContext>(() => {
+    const layers = layerIdentifiers(activeKeymap(project));
+    const custom = new Map(project.customKeycodes.map((c, i) => [customKeycodeValue(spec, i), c.name]));
+    return {
+      layerName: (l) => layers[l],
+      tapDanceName: (i) => project.tapDances.find((d) => d.index === i)?.name,
+      customName: (v) => custom.get(v),
+    };
+  }, [project, spec]);
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const lang = getLanguage();
   const commit = () => {
     if (text === null) return;
-    const r = parseKeySequence(spec, text);
+    const r = parseKeySequence(spec, text, 5, parseCtx);
     if ('error' in r) setError(lang === 'ru' ? r.error.ru : r.error.en);
     else {
       onChange(r.keys);
@@ -48,7 +62,7 @@ function SequenceInput({ seq, onChange }: { seq: LeaderSequence; onChange: (keys
       }}
     >
       <input
-        value={text ?? sequenceText(spec, seq.keys)}
+        value={text ?? sequenceText(spec, seq.keys, nameCtx)}
         placeholder="d d"
         spellCheck={false}
         onChange={(e) => setText(e.target.value)}
@@ -91,8 +105,8 @@ export function LeaderTab({ project }: { project: Project }) {
       <FeatureNote project={project} feature="leader" firstUse={{ en: 'add the first sequence', ru: 'добавите первую последовательность' }} />
       <p className="field-hint">
         {t(
-          'Press the Leader key (QK_LEAD), then type a short sequence — e.g. Leader, d, d → type your e-mail. Keys are plain keys as printed (US layout); type them separated by spaces: “d d”, “g h”, “f1 x”. The wait time is LEADER_TIMEOUT in ',
-          'Нажмите клавишу-лидер (QK_LEAD), затем короткую последовательность — например, лидер, d, d → набрать e-mail. Клавиши — простые, как на клавише (раскладка US), через пробел: «d d», «g h», «f1 x». Время ожидания — LEADER_TIMEOUT в ',
+          'Press the Leader key (QK_LEAD), then type a short sequence — e.g. Leader, d, d → type your e-mail. Type the keys separated by spaces: “d d”, “g h”, “f1 x”. Plain keys are as printed (US layout); any other keycode the leader sees works too: an own keycode, a layer key, a tap dance (“MY_Y”, “MO(1)”, “TD(0)”). The wait time is LEADER_TIMEOUT in ',
+          'Нажмите клавишу-лидер (QK_LEAD), затем короткую последовательность — например, лидер, d, d → набрать e-mail. Клавиши — через пробел: «d d», «g h», «f1 x». Простые — как на клавише (раскладка US); подойдёт и любой другой keycode, который видит лидер: свой keycode, клавиша слоя, tap dance («MY_Y», «MO(1)», «TD(0)»). Время ожидания — LEADER_TIMEOUT в ',
         )}
         <a href={href({ section: 'advanced', tab: 'behavior' })}>{t('QMK settings', '«Настройках QMK»')}</a>.{' '}
         <InfoTip docs={featureDocs('leader') ?? QMK_DOCS.leaderUsage} label={t('Leader key', 'Клавиша-лидер')}>
@@ -133,8 +147,8 @@ export function LeaderTab({ project }: { project: Project }) {
                 <Hint
                   docs={QMK_DOCS.leaderUsage}
                   tip={t(
-                    'The keys you type after the Leader key, separated by spaces, 1 to 5 of them. They are plain keys as printed on a US layout, whatever layer is active.',
-                    'Клавиши, которые вы набираете после лидера, через пробел, от 1 до 5. Это обычные клавиши как на раскладке US, независимо от активного слоя.',
+                    'The keys you type after the Leader key, separated by spaces, 1 to 5 of them. Plain keys are as printed on a US layout, whatever layer is active; own keycodes, layer keys and tap dances work too.',
+                    'Клавиши, которые вы набираете после лидера, через пробел, от 1 до 5. Простые клавиши — как на раскладке US, независимо от активного слоя; свои keycodes, клавиши слоёв и tap dance тоже подходят.',
                   )}
                 >
                   {t('keys after Leader', 'клавиши после лидера')}
@@ -148,7 +162,7 @@ export function LeaderTab({ project }: { project: Project }) {
           {shown.map(({ s, i }) => (
             <div key={s.id} className="row" {...findAttr('leader:' + s.id)} style={{ ['--row-cols' as string]: cols }}>
               <span className="num">{i + 1}</span>
-              <SequenceInput seq={s} onChange={(keys) => patch(s.id, { keys }, t('leader keys', 'клавиши лидера'))} />
+              <SequenceInput seq={s} project={project} onChange={(keys) => patch(s.id, { keys }, t('leader keys', 'клавиши лидера'))} />
               <ActionEditor action={s.action} coalesceKey={`lead:${s.id}`} onChange={(action, coalesce) => patch(s.id, { action }, t('leader action', 'действие лидера'), coalesce)} />
               <button
                 className="icon-btn"

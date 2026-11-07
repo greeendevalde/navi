@@ -9,6 +9,9 @@
 import { REPEAT_SYMBOLS } from './autoRepeat';
 import { LIFT_SYMBOLS } from './heldMods';
 import { LANGUAGE_SYMBOLS } from './languages';
+import { LED_SYMBOLS } from './indicatorLeds';
+import { TASK_SWITCHER_SYMBOLS } from './taskSwitcher';
+import { PLAY_SYMBOLS } from './playKey';
 
 export type CustomFile = 'keymap.c' | 'rules.mk' | 'config.h';
 export const CUSTOM_FILES: CustomFile[] = ['keymap.c', 'rules.mk', 'config.h'];
@@ -24,7 +27,7 @@ export interface CustomIssue {
 const msg = (en: string, ru: string) => ({ en, ru });
 
 /** Functions and arrays the generator may create: a second definition will not compile. */
-export const GENERATED_SYMBOLS = ['keymaps', 'encoder_map', 'tap_dance_actions', 'key_combos', 'key_overrides', 'process_record_user', 'get_tapping_term', 'get_quick_tap_term', 'get_hold_on_other_key_press', 'get_permissive_hold', 'pre_process_record_user', 'get_combo_term', 'combo_should_trigger', 'combo_ref_from_layer', 'process_combo_event', 'layer_state_set_user', 'navi_layers_on', 'navi_layer_off', 'navi_is_stand_in', 'leader_end_user', 'unicode_map', 'keyboard_post_init_user', 'caps_word_press_user', 'via_command_kb', 'raw_hid_receive', 'navi_bootloader_packet', ...REPEAT_SYMBOLS, ...LIFT_SYMBOLS, ...LANGUAGE_SYMBOLS] as const;
+export const GENERATED_SYMBOLS = ['keymaps', 'encoder_map', 'tap_dance_actions', 'key_combos', 'key_overrides', 'process_record_user', 'get_tapping_term', 'get_quick_tap_term', 'get_hold_on_other_key_press', 'get_permissive_hold', 'pre_process_record_user', 'get_combo_term', 'combo_should_trigger', 'combo_ref_from_layer', 'process_combo_event', 'layer_state_set_user', 'navi_layers_on', 'navi_layer_off', 'navi_is_stand_in', 'leader_end_user', 'unicode_map', 'keyboard_post_init_user', 'caps_word_press_user', 'via_command_kb', 'raw_hid_receive', 'navi_bootloader_packet', 'housekeeping_task_user', ...REPEAT_SYMBOLS, ...LIFT_SYMBOLS, ...LANGUAGE_SYMBOLS, ...LED_SYMBOLS, ...TASK_SWITCHER_SYMBOLS, ...PLAY_SYMBOLS] as const;
 
 /**
  * “Own pipeline” mode: NAVI's hooks get a _navi suffix (the user's code defines the QMK hook and calls them).
@@ -45,10 +48,11 @@ export const NAVI_HOOKS = {
   layer_state_set_user: 'layer_state_set_navi',
   keyboard_post_init_user: 'keyboard_post_init_navi',
   caps_word_press_user: 'caps_word_press_navi',
+  housekeeping_task_user: 'housekeeping_task_navi',
 } as const;
 
 /** What the user's own keymap.c lines must not define in “own pipeline” mode: NAVI's arrays and *_navi functions. */
-export const PIPELINE_SYMBOLS = ['keymaps', 'encoder_map', 'tap_dance_actions', 'key_combos', 'key_overrides', 'unicode_map', 'navi_layers_on', 'navi_layer_off', 'navi_is_stand_in', 'via_command_kb', 'navi_raw_hid_receive', 'navi_bootloader_packet', ...REPEAT_SYMBOLS, ...LIFT_SYMBOLS, ...LANGUAGE_SYMBOLS, ...Object.values(NAVI_HOOKS)] as const;
+export const PIPELINE_SYMBOLS = ['keymaps', 'encoder_map', 'tap_dance_actions', 'key_combos', 'key_overrides', 'unicode_map', 'navi_layers_on', 'navi_layer_off', 'navi_is_stand_in', 'via_command_kb', 'navi_raw_hid_receive', 'navi_bootloader_packet', ...REPEAT_SYMBOLS, ...LIFT_SYMBOLS, ...LANGUAGE_SYMBOLS, ...LED_SYMBOLS, ...TASK_SWITCHER_SYMBOLS, ...PLAY_SYMBOLS, ...Object.values(NAVI_HOOKS)] as const;
 
 /** A user header included at the top of keymap.c in “own pipeline” mode: a relative path inside the keymap folder. */
 export const PIPELINE_MAX_HEADERS = 20;
