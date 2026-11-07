@@ -16,16 +16,19 @@ const runner = require('./runner.cjs');
 const ASSET_DIR = path.join(__dirname, 'firmwareTests');
 const PLAYER = 'navi_tests_player.cpp';
 const RUN_SCRIPT = 'run.sh';
+/** Stand-ins for what the test build leaves out that own code may still include or call (the split's transactions). */
+const STUBS = ['transactions.h', 'navi_tests_stubs.c'];
 
 /**
  * Features turned off in the test build, whatever the keymap's rules.mk says: hardware the test platform has no stand-in
  * for, VIA (its dynamic keymap would replace the test fixture's key lookup) and NKRO (the player reads 6-key reports).
- * None of them changes which keys a scenario types.
+ * None of them changes which keys a scenario types. RAW_ENABLE stays as the keymap sets it: own code may call
+ * raw_hid_send, and the test driver has no raw HID, so a send goes nowhere.
  */
 const OFF_IN_TESTS = [
   'RGB_MATRIX_ENABLE', 'RGBLIGHT_ENABLE', 'LED_MATRIX_ENABLE', 'BACKLIGHT_ENABLE', 'OLED_ENABLE', 'ST7565_ENABLE',
   'QUANTUM_PAINTER_ENABLE', 'HAPTIC_ENABLE', 'AUDIO_ENABLE', 'ENCODER_ENABLE', 'ENCODER_MAP_ENABLE', 'SPLIT_KEYBOARD',
-  'RAW_ENABLE', 'VIA_ENABLE', 'VIAL_ENABLE', 'DYNAMIC_KEYMAP_ENABLE', 'POINTING_DEVICE_ENABLE', 'PS2_MOUSE_ENABLE',
+  'VIA_ENABLE', 'VIAL_ENABLE', 'DYNAMIC_KEYMAP_ENABLE', 'POINTING_DEVICE_ENABLE', 'PS2_MOUSE_ENABLE',
   'PS2_ENABLE', 'JOYSTICK_ENABLE', 'DIGITIZER_ENABLE', 'MIDI_ENABLE', 'BLUETOOTH_ENABLE', 'DIP_SWITCH_ENABLE',
   'NKRO_ENABLE', 'CONSOLE_ENABLE', 'LTO_ENABLE', 'STENO_ENABLE', 'VIRTSER_ENABLE', 'SLEEP_LED_ENABLE', 'WPM_ENABLE',
 ];
@@ -57,6 +60,10 @@ function standInFiles({ rows, cols, keymapDir, hasRules, hasConfig }) {
     ...(hasRules ? ['include $(NAVI_KEYMAP)/rules.mk'] : []),
     '# The keymap folder: keymap.c and the files its rules.mk SRC names.',
     'VPATH += $(NAVI_KEYMAP)',
+    '# A firmware build compiles LIB_SRC too (as a library); the test build only takes SRC.',
+    'SRC += $(LIB_SRC)',
+    '# Stand-ins for the split transactions, which SPLIT_KEYBOARD = no leaves out (in the test folder).',
+    'SRC += navi_tests_stubs.c',
     '# Off in the test build (hardware, VIA, NKRO): they change nothing a scenario types.',
     ...OFF_IN_TESTS.map((name) => `${name} = no`),
     `OPT_DEFS += -DNAVI_TESTS_FILE=\\"${keymapDir}/navi_tests.txt\\"`,
@@ -85,6 +92,7 @@ function assetFiles() {
   return {
     [PLAYER]: fs.readFileSync(path.join(ASSET_DIR, PLAYER), 'utf8'),
     [RUN_SCRIPT]: fs.readFileSync(path.join(ASSET_DIR, RUN_SCRIPT), 'utf8').replace(/\r\n/g, '\n'),
+    ...Object.fromEntries(STUBS.map((f) => [f, fs.readFileSync(path.join(ASSET_DIR, f), 'utf8')])),
   };
 }
 
@@ -182,4 +190,4 @@ async function stageAndRun({ r, home, keymapDir, rows, cols, onLine, onJob, run 
   }
 }
 
-module.exports = { OFF_IN_TESTS, PLAYER, RUN_SCRIPT, assetFiles, checkLinuxPath, parseRunOutput, stageAndRun, standInFiles, testsSupported };
+module.exports = { OFF_IN_TESTS, PLAYER, RUN_SCRIPT, STUBS, assetFiles, checkLinuxPath, parseRunOutput, stageAndRun, standInFiles, testsSupported };

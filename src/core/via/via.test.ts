@@ -77,6 +77,17 @@ describe('VIA: write with verification', () => {
     return { sim, client, snap, project };
   }
 
+  it('the plan refuses a macro key step above 0xFF (keyboard memory holds one byte), whatever the build allows', async () => {
+    const { snap } = await setup();
+    let { project } = await setup();
+    project = { ...project, macros: [{ id: 'm', index: 0, name: 'hi', steps: [{ type: 'tap', keycode: q('MO(1)') }] }] };
+    expect(checkMacroSteps(0, project.macros[0].steps, { via: false })).toEqual([]);
+    const plan = planWrite({ project, keymap: activeKeymap(project), snapshot: snap, spec, hardware, includeMacros: true });
+    expect(plan.ok).toBe(false);
+    expect(plan.macros.buffer).toBeNull();
+    expect(plan.warnings.some((w) => w.level === 'error' && /Macros:/.test(w.message.en))).toBe(true);
+  });
+
   it('the plan shows only differences, the write is verified by reading', async () => {
     const { sim, client, snap } = await setup();
     let { project } = await setup();

@@ -12,6 +12,7 @@ import { newId } from '../layout/geometry';
 import { KC_NO, KC_TRNS, makeLayer } from './factory';
 import { layerTarget } from './layerRefs';
 import { mapTapDanceKeycodes } from './tapDances';
+import { mapOwnActionKeycodes } from './languageActions';
 import type { CustomAction, EncoderAction, Geometry, HoldAction, KeyGeom, Keymap, Layer, MatrixPos, Project, TapHoldAction } from './types';
 
 // ── Access ────────────────────────────────────────────────────────────
@@ -229,7 +230,7 @@ function remapAllLayerRefs(p: Project, keymapId: string, spec: KeycodeSpec, mapp
     result: fix(c.result),
     layers: c.layers?.map(mapping).filter((n): n is number => n !== null),
   }));
-  const keyOverrides = p.keyOverrides.map((o) => ({ ...o, replacement: fix(o.replacement), layers: o.layers?.map(mapping).filter((n): n is number => n !== null) }));
+  const keyOverrides = p.keyOverrides.map((o) => ({ ...o, trigger: fix(o.trigger), replacement: fix(o.replacement), layers: o.layers?.map(mapping).filter((n): n is number => n !== null) }));
   // An alias follows its key: TG(2) stays the same layer after a reorder. An alias of a deleted layer goes away,
   // otherwise its label would land on every KC_NO (or on the plain tap key of an LT).
   const refsDeleted = (v: number) => {
@@ -262,15 +263,20 @@ function remapAllLayerRefs(p: Project, keymapId: string, spec: KeycodeSpec, mapp
         }),
       }
     : p.firmware;
+  // Keycodes NAVI's code plays or compares (any keycode there: TG(2), a layer's stand-in) follow their layer too.
+  const leaderSequences = p.leaderSequences.map((s) => ({ ...s, keys: s.keys.map(fix), action: s.action.type === 'tap' ? { ...s.action, keycode: fix(s.action.keycode) } : s.action }));
+  const customKeycodes = p.customKeycodes.map((c) => ({ ...c, action: mapOwnActionKeycodes(c.action, fix) }));
+  const macros = p.macros.map((m) => ({ ...m, steps: m.steps.map((s) => (s.type === 'tap' || s.type === 'down' || s.type === 'up' ? { ...s, keycode: fix(s.keycode) } : s)) }));
   // A language's layer follows its layer; a deleted one leaves the language without a layer.
-  const languages = p.languages.map((l) => {
+  const languages = p.languages.map((l0) => {
+    const l = l0.osShortcut === undefined ? l0 : { ...l0, osShortcut: fix(l0.osShortcut) };
     if (l.layer === undefined) return l;
     const n = mapping(l.layer);
     if (n !== null) return { ...l, layer: n };
     const { layer: _, ...rest } = l;
     return rest;
   });
-  return touch({ ...p, keymaps, tapDances, combos, keyOverrides, keyAliases, tapHolds, keyLists, tapHoldActions, languages, firmware });
+  return touch({ ...p, keymaps, tapDances, combos, keyOverrides, keyAliases, tapHolds, keyLists, tapHoldActions, languages, firmware, leaderSequences, customKeycodes, macros });
 }
 
 /**
@@ -297,8 +303,8 @@ export function mapProjectKeycodes(p: Project, fix: (v: number) => number): Proj
     keyLists: p.keyLists.map((l) => ({ ...l, keys: keep(l.keys) })),
     firmware: p.firmware.capsWordRules ? { ...p.firmware, capsWordRules: p.firmware.capsWordRules.map((r) => ({ ...r, keys: keep(r.keys) })) } : p.firmware,
     tapHoldActions: p.tapHoldActions.map((a) => ({ ...a, tap: fix(a.tap), hold: a.hold.type === 'key' ? { type: 'key', keycode: fix(a.hold.keycode) } : a.hold })),
-    leaderSequences: p.leaderSequences.map((s) => ({ ...s, action: action(s.action) })),
-    customKeycodes: p.customKeycodes.map((c) => ({ ...c, action: action(c.action) })),
+    leaderSequences: p.leaderSequences.map((s) => ({ ...s, keys: s.keys.map(fix), action: action(s.action) })),
+    customKeycodes: p.customKeycodes.map((c) => ({ ...c, action: mapOwnActionKeycodes(c.action, fix) })),
     languages: p.languages.map((l) => (l.osShortcut === undefined ? l : { ...l, osShortcut: fix(l.osShortcut) })),
     macros: p.macros.map((m) => ({ ...m, steps: m.steps.map((s) => (s.type === 'tap' || s.type === 'down' || s.type === 'up' ? { ...s, keycode: fix(s.keycode) } : s)) })),
   });

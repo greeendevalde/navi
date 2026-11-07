@@ -89,10 +89,10 @@ describe('tap-hold keys with actions: model', () => {
     expect(() => ensureTapHold(spec, p, q('KC_A'), layer(16))).toThrow();
   });
 
-  it('a stand-in in a combo is an error, in a tap dance it is fine; a hand-edited one that does not match its hold is an error', () => {
+  it('a stand-in in a combo or a tap dance is fine; a hand-edited one that does not match its hold is an error', () => {
     const a = put(createDilemmaProject(), [1, 1], q('C(KC_Z)'), mods(0x01));
     const combo = { ...a.p, combos: [{ id: 'c1', name: 'C_ONE', keys: [[1, 1], [1, 2]] as [number, number][], result: a.keycode }] };
-    expect(checkTapHoldActions(spec, combo).some((i) => i.level === 'error')).toBe(true);
+    expect(checkTapHoldActions(spec, combo).filter((i) => i.level === 'error')).toEqual([]);
     const td = { ...a.p, tapDances: [{ id: 't', index: 0, name: 'TD_A', tap: a.keycode, hold: 0, doubleTap: 0, tapHold: 0 }] };
     expect(checkTapHoldActions(spec, td).filter((i) => i.level === 'error')).toEqual([]);
     const wrong = { ...a.p, tapHoldActions: [{ ...a.p.tapHoldActions[0], hold: mods(0x02) }] };

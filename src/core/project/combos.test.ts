@@ -66,8 +66,12 @@ describe('combo reference layers', () => {
     expect(c).toContain('const uint16_t PROGMEM qw_2_keys[] = { KC_1, KC_2, COMBO_END };');
     expect(c).toContain('    COMBO(qw_keys, KC_ESC),\n    COMBO(qw_2_keys, KC_ESC),');
     expect(c).toMatch(/case 0: return 40; \/\/ qw\n\s+case 1: return 40; \/\/ qw_2/);
-    expect(c).toContain('case 0: return top & ((layer_state_t)1 << L_BASE | (layer_state_t)1 << L_LAYER_2 | (layer_state_t)1 << L_LAYER_3); // qw');
-    expect(c).toContain('case 1: return top & ((layer_state_t)1 << L_LAYER_1); // qw_2');
+    // QMK matches keycodes: each QMK combo also counts only presses on the combo's own key spots
+    const at = `navi_combo_at(record, (const uint8_t[]){${p.combos[0].keys.flat().join(', ')}}, 2)`;
+    expect(c).toContain(`case 0: return (top & ((layer_state_t)1 << L_BASE | (layer_state_t)1 << L_LAYER_2 | (layer_state_t)1 << L_LAYER_3)) && ${at}; // qw`);
+    expect(c).toContain(`case 1: return (top & ((layer_state_t)1 << L_LAYER_1)) && ${at}; // qw_2`);
+    expect(c).toContain('static bool navi_combo_at(keyrecord_t *record, const uint8_t *keys, uint8_t count) {');
+    expect(file(p, 'config.h')).toContain('#define COMBO_SHOULD_TRIGGER');
     expect(c).toContain('uint8_t combo_ref_from_layer(uint8_t layer) {');
     expect(c).toContain('    switch (navi_key_layer) {\n        case L_LAYER_1: return L_LAYER_1;\n        case L_LAYER_2: return L_LAYER_1;\n        default: return L_BASE;\n    }');
     expect(c).toContain('    navi_key_layer = navi_layer_of(record);');

@@ -16,6 +16,8 @@ export interface HoldPress {
   holdLists: string[];
   /** Hold keys that count only in one language: its NAVI_LANG_* name, keys and key list arrays. */
   byLanguage?: { lang: string; keys: string[]; lists: string[] }[];
+  /** C name of the array of key spots (row << 8 | col) whose press also makes a hold. */
+  spots?: string;
 }
 
 export interface TapHoldPlan {
@@ -27,6 +29,8 @@ export interface TapHoldPlan {
   permissive: { codes: string[]; value: boolean }[];
   /** Key lists the hold keys use: one static array each. */
   lists: { name: string; keys: string[] }[];
+  /** Spot arrays: one static array each (navi_spots_<n>), values `row << 8 | col`. */
+  spotArrays: { name: string; at: number[] }[];
 }
 
 export function planTapHolds(settings: TapHoldSetting[], kc: (v: number) => string, keyLists: KeyList[] = [], languageName: (id: string) => string | undefined = () => undefined): TapHoldPlan {
@@ -36,6 +40,7 @@ export function planTapHolds(settings: TapHoldSetting[], kc: (v: number) => stri
     holdPress: [],
     permissive: [],
     lists: [],
+    spotArrays: [],
   };
   const cNames = keyListCNames(keyLists);
   const usedLists = new Set<string>();
@@ -57,8 +62,13 @@ export function planTapHolds(settings: TapHoldSetting[], kc: (v: number) => stri
       const keys = g.keys.filter((k) => k > 1).map(kc);
       if (keys.length || gLists.length) byLanguage.push({ lang, keys, lists: gLists.map((id) => cNames.get(id)!) });
     }
-    if (s.flavor !== undefined || holdKeys.length || holdLists.length || byLanguage.length) {
-      plan.holdPress.push({ codes, flavor: s.flavor, holdKeys, holdLists, ...(byLanguage.length ? { byLanguage } : {}) });
+    let spots: string | undefined;
+    if (s.holdOnSpots?.length) {
+      spots = `navi_spots_${plan.spotArrays.length + 1}`;
+      plan.spotArrays.push({ name: spots, at: s.holdOnSpots.map((p) => (p.row << 8) | p.col) });
+    }
+    if (s.flavor !== undefined || holdKeys.length || holdLists.length || byLanguage.length || spots) {
+      plan.holdPress.push({ codes, flavor: s.flavor, holdKeys, holdLists, ...(byLanguage.length ? { byLanguage } : {}), ...(spots ? { spots } : {}) });
     }
     if (s.flavor !== undefined) plan.permissive.push({ codes, value: s.flavor === 'balanced' });
   }
@@ -71,14 +81,39 @@ export function planTapHolds(settings: TapHoldSetting[], kc: (v: number) => stri
   return plan;
 }
 
-const holdsOn = (h: HoldPress) => h.holdKeys.length > 0 || h.holdLists.length > 0 || !!h.byLanguage?.length;
+const holdsOn = (h: HoldPress) => h.holdKeys.length > 0 || h.holdLists.length > 0 || !!h.byLanguage?.length || !!h.spots;
+export const hasSpots = (plan: TapHoldPlan) => plan.spotArrays.length > 0;
 export const hasHoldKeys = (plan: TapHoldPlan) => plan.holdPress.some(holdsOn);
 export const anyHoldsOn = (tracked: HoldPress[]) => tracked.some(holdsOn);
 
 /** The C test "v is one of the hold keys". */
 const anyOf = (keys: string[], lists: string[], v: string) => [...keys.map((k) => `${v} == ${k}`), ...lists.map((l) => `NAVI_IN_KEYS(${l}, ${v})`)];
-const holdTest = (h: HoldPress, v: string) =>
-  [...anyOf(h.holdKeys, h.holdLists, v), ...(h.byLanguage ?? []).map((g) => `(navi_lang == ${g.lang} && (${anyOf(g.keys, g.lists, v).join(' || ')}))`)].join(' || ');
+const holdTest = (h: HoldPress, v: string, at: string) =>
+  [
+    ...anyOf(h.holdKeys, h.holdLists, v),
+    ...(h.byLanguage ?? []).map((g) => `(navi_lang == ${g.lang} && (${anyOf(g.keys, g.lists, v).join(' || ')}))`),
+    ...(h.spots ? [`NAVI_AT_IN(${h.spots}, ${at})`] : []),
+  ].join(' || ');
+
+/** The key spot arrays and the lookup the spot tests use (spot = row << 8 | col, 0xFFFF: no key position). */
+export function spotsCode(arrays: TapHoldPlan['spotArrays']): string[] {
+  if (!arrays.length) return [];
+  const hex = (n: number) => `0x${n.toString(16).toUpperCase().padStart(4, '0')}`;
+  const out = ['// ── Key spots (Advanced → Tap-hold): a press at one of these matrix positions makes a hold, whatever it types ──'];
+  for (const a of arrays) out.push(`static const uint16_t ${a.name}[] = { ${a.at.map(hex).join(', ')} };`);
+  out.push(
+    '',
+    'static bool navi_at_in(const uint16_t *spots, uint8_t count, uint16_t at) {',
+    '    for (uint8_t i = 0; i < count; i++) {',
+    '        if (spots[i] == at) return true;',
+    '    }',
+    '    return false;',
+    '}',
+    '#define NAVI_AT_IN(spots, at) navi_at_in(spots, sizeof(spots) / sizeof((spots)[0]), at)',
+    '',
+  );
+  return out;
+}
 
 /** `case A:` lines for every code, the last one followed by `tail` (if any) on the same line. */
 export function caseLines(codes: string[], tail?: string, indent = '        '): string[] {
@@ -121,20 +156,26 @@ export function preProcessHook(
   hook: string,
   opts: {
     lastPressed: boolean;
+    /** Hold spots: remember where the key pressed last is (navi_last_at), and where each interrupter is. */
+    spots?: boolean;
     replay: boolean;
     interrupters: boolean;
     comboLayer?: boolean;
     comboEvents?: boolean;
     /** End the active tap dance on another key's press before QMK's tapping code (any dance: QMK's own semantics). */
     tapDance?: boolean;
+    /** Keys (C keycodes, as process_combo matches them) of combos whose result is a tap dance. */
+    tapDanceComboKeys?: string[];
   },
 ): string[] {
   const out: string[] = [];
   // Combo results NAVI plays (comboEvents) need where each key's first interrupter sits.
-  const at = opts.interrupters && opts.comboEvents;
+  const at = opts.interrupters && (opts.comboEvents || opts.spots);
   if (opts.lastPressed) {
     out.push('// The key pressed last: "hold when pressed" keys need it, and get_hold_on_other_key_press only gets the tap-hold key.');
-    out.push('static uint16_t navi_last_pressed = KC_NO;', '');
+    out.push('static uint16_t navi_last_pressed = KC_NO;');
+    if (opts.spots) out.push('static uint16_t navi_last_at      = 0xFFFF; // where it is: row << 8 | col (0xFFFF: no key position)');
+    out.push('');
   }
   if (opts.replay) {
     out.push(
@@ -190,17 +231,64 @@ export function preProcessHook(
     if (opts.lastPressed) out.push('static uint16_t navi_press_keycode;');
     out.push('');
   }
+  const tdCombo = opts.tapDance && !!opts.tapDanceComboKeys?.length;
+  if (tdCombo) {
+    out.push(
+      '#ifdef COMBO_ENABLE',
+      '// Keys of combos whose result is a tap dance, as process_combo matches them',
+      `static const uint16_t PROGMEM navi_td_combo_keys[] = { ${opts.tapDanceComboKeys!.join(', ')} };`,
+      '#    ifndef COMBO_ONLY_FROM_LAYER',
+      'uint8_t combo_ref_from_layer(uint8_t layer); // QMK declares it in process_combo.c only',
+      '#    endif',
+      '',
+      '// Can process_combo take this press for a combo that plays a tap dance? pre_process_record runs before it, so such',
+      "// a press must not end the active dance here: the combo may be the dance's next tap. A key that plays on its own",
+      '// still ends it, later, in QMK.',
+      'static bool navi_td_combo_key(uint16_t keycode, keyrecord_t *record) {',
+      '    if (!is_combo_enabled() || !IS_KEYEVENT(record->event)) return false;',
+      '#    ifdef COMBO_ONLY_FROM_LAYER',
+      '    keycode = keymap_key_to_keycode(COMBO_ONLY_FROM_LAYER, record->event.key);',
+      '#    else',
+      '    uint8_t highest = get_highest_layer(layer_state | default_layer_state);',
+      '    uint8_t ref     = combo_ref_from_layer(highest);',
+      '    if (ref != highest) keycode = keymap_key_to_keycode(ref, record->event.key);',
+      '#    endif',
+      '    for (uint8_t i = 0; i < ARRAY_SIZE(navi_td_combo_keys); i++) {',
+      '        if (pgm_read_word(&navi_td_combo_keys[i]) == keycode) return true;',
+      '    }',
+      '    return false;',
+      '}',
+      '#endif',
+      '',
+    );
+  }
   out.push(`bool ${hook}(uint16_t keycode, keyrecord_t *record) {`);
   if (opts.tapDance) {
     out.push(
       '    // A press of another key ends the active tap dance. QMK does that in process_record, after its tap-hold code',
       "    // judged this key by the layers before the dance's action (a layer change could make a mod-tap hold instead of",
       '    // tap). Ended here, the same way and before that code; QMK finds no active dance later. The key is looked up again.',
-      '    if (preprocess_tap_dance(keycode, record)) keycode = get_record_keycode(record, true);',
     );
+    if (tdCombo) {
+      if (opts.comboLayer) out.push('    navi_key_layer = navi_layer_of(record); // combo_ref_from_layer reads it');
+      out.push(
+        '#ifdef COMBO_ENABLE',
+        '    if (!(record->event.pressed && navi_td_combo_key(keycode, record)) && preprocess_tap_dance(keycode, record)) keycode = get_record_keycode(record, true);',
+        '#else',
+        '    if (preprocess_tap_dance(keycode, record)) keycode = get_record_keycode(record, true);',
+        '#endif',
+      );
+    } else out.push('    if (preprocess_tap_dance(keycode, record)) keycode = get_record_keycode(record, true);');
   }
   if (opts.comboLayer) out.push('    navi_key_layer = navi_layer_of(record); // for combo_ref_from_layer: pre_process_record runs before combos');
   if (opts.lastPressed) out.push('    if (record->event.pressed) navi_last_pressed = keycode;');
+  if (opts.spots) {
+    out.push(
+      '    if (record->event.pressed) {',
+      '        navi_last_at = IS_KEYEVENT(record->event) && record->event.key.row < MATRIX_ROWS && record->event.key.col < MATRIX_COLS ? (uint16_t)record->event.key.row << 8 | record->event.key.col : 0xFFFF;',
+      '    }',
+    );
+  }
   if (opts.comboEvents) {
     out.push(
       '    navi_in_press = IS_KEYEVENT(record->event) && record->event.pressed && record->event.key.row < MATRIX_ROWS && record->event.key.col < MATRIX_COLS;',
@@ -220,7 +308,7 @@ export function preProcessHook(
  * that completes or ends it; the combo's own keys were taken by it, so a key they interrupted first was interrupted
  * by the combo's result.
  */
-export function comboEventCode(hook: string, combos: { result: string; keys: [number, number][]; name: string }[], opts: { lastPressed: boolean; interrupters: boolean }): string[] {
+export function comboEventCode(hook: string, combos: { result: string; keys: [number, number][]; name: string }[], opts: { lastPressed: boolean; interrupters: boolean; spots?: boolean; count?: boolean }): string[] {
   const out = [
     '// ── Combo results seen by the tap-hold logic like real key presses (their QMK result is KC_NO) ──',
     "// Is the key at row, col one of the combo's keys (row, col pairs)?",
@@ -257,9 +345,13 @@ export function comboEventCode(hook: string, combos: { result: string; keys: [nu
   } else out.push('        navi_note_press(keycode);');
   out.push('        if (before) navi_down[r0] |= b0;');
   if (opts.lastPressed) out.push('        navi_last_pressed = keycode;');
+  if (opts.spots) out.push('        navi_last_at = 0xFFFF; // a combo result has no key position');
   out.push('    }', '#ifndef NO_ACTION_TAPPING', '    action_tapping_process(record);', '#else', '    process_record(&record);', '#endif');
   if (opts.lastPressed) out.push('    if (before) navi_last_pressed = navi_press_keycode;');
-  out.push('}', '', `void ${hook}(uint16_t combo_index, bool pressed) {`, '    switch (combo_index) {');
+  if (opts.spots) out.push('    if (before) navi_last_at = (uint16_t)navi_press_key.row << 8 | navi_press_key.col;');
+  out.push('}', '', `void ${hook}(uint16_t combo_index, bool pressed) {`);
+  if (opts.count) out.push('    if (pressed) navi_count_combo(combo_index); // key press counts');
+  out.push('    switch (combo_index) {');
   combos.forEach((c, i) => {
     if (c.result === 'KC_NO') return;
     out.push(`        case ${i}: navi_combo(${c.result}, pressed, (const uint8_t[]){${c.keys.flat().join(', ')}}, ${c.keys.length}); break; // ${c.name}`);
@@ -362,7 +454,7 @@ export function tapHoldsCode(o: {
         continue;
       }
       const answer = h.flavor === undefined ? 'NAVI_HOLD_ON_OTHER_KEY_PRESS' : 'false';
-      out.push(...caseLines(h.codes), `            if (${holdTest(h, 'navi_interrupter[row][col]')}) return true;`, `            return ${answer};`);
+      out.push(...caseLines(h.codes), `            if (${holdTest(h, 'navi_interrupter[row][col]', 'navi_interrupter_at[row][col]')}) return true;`, `            return ${answer};`);
     }
     out.push('        default: return false;', '    }', '#endif', '}', '');
     // The hold side of a tap turned into a hold: stand-ins first, then what QMK does for MT / LT.
@@ -454,7 +546,7 @@ export function holdOnOtherKeyPressHook(name: string, plan: TapHoldPlan): string
   const cases = plan.holdPress.flatMap((h): string[] => {
     const answer = h.flavor === undefined ? undefined : h.flavor === 'hold-preferred' ? 'true' : 'false';
     if (!holdsOn(h)) return answer === undefined ? [] : caseLines(h.codes, `return ${answer};`);
-    return [...caseLines(h.codes), `            if (${holdTest(h, 'navi_last_pressed')}) return true;`, answer === undefined ? '            break;' : `            return ${answer};`];
+    return [...caseLines(h.codes), `            if (${holdTest(h, 'navi_last_pressed', 'navi_last_at')}) return true;`, answer === undefined ? '            break;' : `            return ${answer};`];
   });
   return [`bool ${name}(uint16_t keycode, keyrecord_t *record) {`, '    switch (keycode) {', ...cases, '        default: break;', '    }', ...GLOBAL_FLAG('HOLD_ON_OTHER_KEY_PRESS'), '}', ''];
 }

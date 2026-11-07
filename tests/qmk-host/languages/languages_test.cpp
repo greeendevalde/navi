@@ -5,6 +5,7 @@
 //   20 MC_0: tap A, "hi", tap B   21 HELLO: "ok"   22 TO(0)
 //   23 TD_TEXT, every tap: 1) "hi", Left, Shift+Home (Shift: "->", End)   2) tap X, "2"   24 LGUI_T(KC_S)
 // Layer 2 (symbols, not a typing layer): 10 S(KC_1)   11 KC_SCLN   12 KC_1   13 C(KC_1)   14 KC_A
+// Per-language: 25 tap APOS / hold layer 2   26 APOS ("'s" in English, "'" else)   27 DASH (X, in Russian nothing)
 #include "../navi_host.hpp"
 
 extern "C" {
@@ -116,6 +117,11 @@ TEST_F(Languages, macro_in_english_types_its_keys) {
     EXPECT_EQ(play({"+20", "-20"}), "A - H - I - B -");
 }
 
+// A held Shift is let go once for the whole macro, its keys before the text included, and put back after
+TEST_F(Languages, macro_in_english_with_a_held_shift_lifts_it_once) {
+    EXPECT_EQ(play({"+8", "+20", "-20", "-8"}), "LSFT - A - H - I - B - LSFT -");
+}
+
 // The keys before the first text are the keyboard's; from the text on, everything goes to the program in order.
 TEST_F(Languages, macro_in_russian_sends_its_text_and_later_keys_to_the_program) {
     EXPECT_EQ(play({"+0", "-0", "+20", "-20"}), "A -");
@@ -158,4 +164,30 @@ TEST_F(Languages, every_tap_second_tap_presses_its_key_then_sends_text) {
 // A home row GUI held (misfired) while a step with text plays: the text is typed without it, GUI comes back after
 TEST_F(Languages, every_tap_text_plays_without_a_held_gui) {
     EXPECT_EQ(play({"+24", "wait", "+23", "-23", "-24"}), "LGUI H - I - 0x50 - LSFT LSFT+0x4A LSFT - LGUI -");
+}
+
+// Per-language actions: APOS ("'s" in English, "'" in the other languages) as a tap-hold key's tap (hold: layer 2)
+// at 25 and a plain key at 26; DASH at 27 taps X, in Russian nothing.
+TEST_F(Languages, per_language_tap_hold_types_its_english_text_in_english) {
+    EXPECT_EQ(play({"+25", "-25"}), "0x34 - S -");
+    EXPECT_STREQ(host_text, "");
+}
+
+TEST_F(Languages, per_language_tap_hold_types_the_other_languages_text_in_russian) {
+    EXPECT_EQ(play({"+0", "-0", "+25", "-25"}), "");
+    EXPECT_STREQ(host_text, "'");
+}
+
+TEST_F(Languages, per_language_tap_hold_held_is_its_layer) {
+    EXPECT_EQ(play({"+25", "wait", "+14", "-14", "-25"}), "A -");
+    EXPECT_STREQ(host_text, "");
+}
+
+TEST_F(Languages, per_language_plain_key_follows_the_language) {
+    EXPECT_EQ(play({"+26", "-26", "+0", "-0", "+26", "-26", "+2", "-2", "+26", "-26"}), "0x34 - S - 0x34 - S -");
+    EXPECT_STREQ(host_text, "'");
+}
+
+TEST_F(Languages, per_language_entry_of_nothing_does_nothing) {
+    EXPECT_EQ(play({"+27", "-27", "+0", "-0", "+27", "-27"}), "X -");
 }

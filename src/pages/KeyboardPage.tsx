@@ -7,8 +7,11 @@
  *    taking transparency and layer order into account, as in QMK.
  * Comparison: with the saved version, with the keyboard (read over VIA) or with another layer.
  */
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { Maximize2, Minus, Plus } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Flame, Maximize2, Minus, Plus } from 'lucide-react';
+import { HeatmapOverlay, HeatmapStrip, heatForKey } from '../components/keyboard/Heatmap';
+import { maxSpotTotal } from '../core/project/keyCounts';
+import { useKeyCountsStore } from '../store/keyCountsStore';
 import { KeyboardCanvas, type KeyView } from '../components/keyboard/KeyboardCanvas';
 import { KeycodePicker } from '../components/keyboard/KeycodePicker';
 import { SharedTabPanel, sharedPanelDomId, Tabs } from '../components/Tabs';
@@ -82,6 +85,14 @@ export function KeyboardPage() {
   });
   const editorRef = useRef<HTMLDivElement>(null);
 
+  // Heatmap view (step 17): UI state only. Clicks, drops and the catalog keep editing while it is shown.
+  const [heat, setHeat] = useState(false);
+  const counts = useKeyCountsStore((s) => s.file);
+  const heatMax = useMemo(() => (counts ? maxSpotTotal(counts) : 0), [counts]);
+  useEffect(() => {
+    if (heat) void useKeyCountsStore.getState().load();
+  }, [heat]);
+
   const layer = active ? Math.min(editor.layer, active.keymap.layers.length - 1) : 0;
   const savedKeymap = useMemo(() => (saved && active ? (saved.keymaps.find((k) => k.id === active.keymap.id) ?? null) : null), [saved, active]);
 
@@ -141,6 +152,7 @@ export function KeyboardPage() {
         warn: isWarn(value),
         pressed: editor.pressed.has(mk),
         highlighted: editor.highlight.some((h) => h[0] === pos[0] && h[1] === pos[1]) || hoverKeys.has(mk),
+        heat: heat ? heatForKey(counts, keymap, layer, pos, heatMax) : undefined,
       };
     },
     [
@@ -154,6 +166,9 @@ export function KeyboardPage() {
       editor.pressed,
       editor.highlight,
       hoverKeys,
+      heat,
+      counts,
+      heatMax,
       spec,
       settings.showTransparentSource,
       savedKeymap,
@@ -213,6 +228,16 @@ export function KeyboardPage() {
     <div className="editor" ref={editorRef} style={{ ['--picker-height' as string]: `${pickerHeight}%` }}>
       <div className="editor-bar">
         <LayerTabs />
+        <div className="seg" role="group" aria-label={t('Heatmap', 'Тепловая карта')}>
+          <button
+            className={`heat-toggle${heat ? ' is-on' : ''}`}
+            aria-pressed={heat}
+            onClick={() => setHeat(!heat)}
+            title={t('Color the keys by how often they are pressed', 'Раскрасить клавиши по частоте нажатий')}
+          >
+            <Flame size={13} strokeWidth={1.5} /> {t('Heatmap', 'Тепловая карта')}
+          </button>
+        </div>
         <div className="seg" role="group" aria-label={t('View', 'Вид')}>
           <button className={editor.view === 'assign' ? 'is-on' : ''} onClick={() => editor.setView('assign')} title={t('What is assigned on this layer', 'Что назначено на этом слое')}>
             {t('assigned', 'назначения')}
@@ -263,6 +288,7 @@ export function KeyboardPage() {
             </option>
           ))}
         </select>
+        {heat && <HeatmapStrip max={heatMax} />}
       </div>
       {/* The layer tabs' panel; `display: contents` keeps the canvas a row of the editor grid. */}
       <SharedTabPanel idBase={LAYER_TABS} current={String(layer)} style={{ display: 'contents' }}>
@@ -283,6 +309,7 @@ export function KeyboardPage() {
         ariaLabel={t('Keyboard layout', 'Схема клавиатуры')}
         overlay={
           <>
+            {heat && <HeatmapOverlay />}
             <div className="kb-zoom">
               <div className="seg" role="group" aria-label={t('Zoom', 'Масштаб')}>
                 <button

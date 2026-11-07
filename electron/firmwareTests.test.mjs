@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const require = createRequire(import.meta.url);
-const { OFF_IN_TESTS, parseRunOutput, standInFiles, testsSupported } = require('./firmwareTests.cjs');
+const { OFF_IN_TESTS, STUBS, assetFiles, parseRunOutput, standInFiles, testsSupported } = require('./firmwareTests.cjs');
 const { runFirmwareTests, REVIEW_REFUSAL, OWN_CODE_REFUSAL, foreignCode } = require('./qmk.cjs');
 const { createTrustStore } = require('./trust.cjs');
 
@@ -25,6 +25,11 @@ describe('board stand-in', () => {
       expect(OFF_IN_TESTS).toContain(name);
       expect(mk.indexOf(`${name} = no`)).toBeGreaterThan(mk.indexOf('include $(NAVI_KEYMAP)/rules.mk'));
     }
+    // Own code may include transactions.h unguarded, send raw HID and keep code in LIB_SRC (a real build compiles all three).
+    expect(mk).toContain('SRC += navi_tests_stubs.c');
+    expect(mk.indexOf('SRC += $(LIB_SRC)')).toBeGreaterThan(mk.indexOf('include $(NAVI_KEYMAP)/rules.mk'));
+    expect(OFF_IN_TESTS).not.toContain('RAW_ENABLE');
+    expect(Object.keys(assetFiles())).toEqual(expect.arrayContaining(STUBS));
     const bare = standInFiles({ rows: 4, cols: 10, keymapDir: '/k', hasRules: false, hasConfig: false });
     expect(bare['test.mk']).not.toContain('include');
     expect(bare['config.h']).not.toContain('/k/config.h');

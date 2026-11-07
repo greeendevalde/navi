@@ -18,7 +18,9 @@
  */
 import type { KeycodeSpec } from '../keycodes/spec';
 import { isTypingLayer, languageCName, languageKeycodes, languageKeyOf, plainLanguageIndex, usesTextRoute } from '../project/languages';
+import { isTextStep, textArg } from '../project/textSteps';
 import type { Keymap, MacroStep, Project, TextRoute } from '../project/types';
+import { playsAsKey } from './playKey';
 
 const hex = (v: number) => `0x${v.toString(16).toUpperCase().padStart(4, '0')}`;
 
@@ -294,7 +296,7 @@ export function languageEarlyCode(o: { project: Project; keymap: Keymap; plan: L
  * Switching languages: after the layer-on-top block (navi_forget), before process_record. `layerHook` is the name of
  * the layer callback to write when “layer keys on top” is off (the on-top callback keeps the layer itself).
  */
-export function languageSwitchCode(o: { project: Project; plan: LanguagePlan; kc: (v: number) => string; layersOnTop: boolean; layerHook: string; postInit: string; spec: KeycodeSpec }): string[] {
+export function languageSwitchCode(o: { project: Project; plan: LanguagePlan; kc: (v: number) => string; layersOnTop: boolean; layerHook: string; spec: KeycodeSpec }): string[] {
   const { project, plan } = o;
   const list = project.languages;
   const out: string[] = [];
@@ -326,7 +328,12 @@ export function languageSwitchCode(o: { project: Project; plan: LanguagePlan; kc
   }
   out.push('void navi_switch_language(uint8_t language) {', '    if (language >= NAVI_LANGUAGES) return;');
   if (plan.program) out.push('    navi_switch_language_user(language); // your program switches the computer');
-  else if (shortcuts) out.push('    if (navi_lang_shortcuts[language] != KC_NO) tap_code16(navi_lang_shortcuts[language]); // the computer’s shortcut');
+  else if (shortcuts) {
+    // A shortcut tap_code16 can't send (a macro, a layer key…) is played as a key event (playKey.ts).
+    const played = list.some((l) => l.osShortcut !== undefined && playsAsKey(l.osShortcut));
+    const tap = played ? 'navi_play_tap(navi_lang_shortcuts[language], NULL);' : 'tap_code16(navi_lang_shortcuts[language]);';
+    out.push(`    if (navi_lang_shortcuts[language] != KC_NO) ${tap} // the computer’s shortcut`);
+  }
   out.push('    navi_set_language(language);', '}', '');
   const first = languageKeycodes(o.spec, list.length - 1).toggle;
   const last = languageKeycodes(o.spec, 0).to;
@@ -343,7 +350,6 @@ export function languageSwitchCode(o: { project: Project; plan: LanguagePlan; kc
     '}',
     '',
   );
-  if (plan.layers) out.push(`void ${o.postInit}(void) {`, '    layer_state_set(layer_state); // the first language’s layer on at power-on', '}', '');
   return out;
 }
 
@@ -479,8 +485,8 @@ export function routedMacroStatements(
   /** The C statement that types a text argument (default navi_send_text). */
   textCall: (arg: string) => string = (arg) => `navi_send_text(${arg});`,
 ): string[] {
-  if (!plan.routed || !steps.some((s) => s.type === 'text')) return steps.map(normal);
-  if (!plan.program) return steps.map((s) => (s.type === 'text' ? textCall(cString(s.text)) : normal(s)));
+  if (!plan.routed || !steps.some(isTextStep)) return steps.map(normal);
+  if (!plan.program) return steps.map((s) => (isTextStep(s) ? textCall(textArg(s, cString)) : normal(s)));
   const out: string[] = [];
   let stream: string[] = [];
   let started = false;
@@ -489,13 +495,14 @@ export function routedMacroStatements(
     stream = [];
   };
   for (const s of steps) {
-    if (!started && s.type !== 'text') {
+    if (!started && !isTextStep(s)) {
       out.push(normal(s));
       continue;
     }
     started = true;
-    if (s.type === 'text') {
-      if (s.text) stream.push(cString(s.text));
+    if (isTextStep(s)) {
+      // A secret's define is a string literal too: it joins the stream by C's literal concatenation.
+      if (s.type === 'secret' || s.text) stream.push(textArg(s, cString));
     } else if (s.type === 'delay') {
       flush();
       out.push(`wait_ms(${s.ms});`);

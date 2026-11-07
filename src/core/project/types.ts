@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 18;
+export const PROJECT_SCHEMA_VERSION = 23;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -205,7 +205,12 @@ export type MacroStep =
   | { type: 'tap'; keycode: number }
   | { type: 'down'; keycode: number }
   | { type: 'up'; keycode: number }
-  | { type: 'delay'; ms: number };
+  | { type: 'delay'; ms: number }
+  /**
+   * Secret text: types the value of the C define `name` (a quoted string) from the project's secrets header
+   * (firmware.secretsHeader), which the user keeps beside keymap.c. NAVI stores and shows only the name.
+   */
+  | { type: 'secret'; name: string };
 
 /** Held real modifiers while NAVI types text: let go for the text (`lift`) or left as they are (`keep`). */
 export type HeldMods = 'lift' | 'keep';
@@ -295,6 +300,26 @@ export interface KeyOverride {
 
 export type CustomAction = { type: 'none' } | { type: 'send-string'; text: string; heldMods?: HeldMods } | { type: 'tap'; keycode: number };
 
+/** One language's action of a per-language own keycode. */
+export interface LanguageActionEntry {
+  /** Language id (Project.languages), so moving languages keeps it; removing the language drops the entry. */
+  language: string;
+  action: CustomAction;
+}
+
+/**
+ * Per-language action (since format 19): the action of the language that is on when the key fires
+ * (`navi_language()` in the C); a language without an entry of its own plays `other`.
+ */
+export interface ByLanguageAction {
+  type: 'by-language';
+  byLanguage: LanguageActionEntry[];
+  other: CustomAction;
+}
+
+/** What an own keycode does: one action, or one per language. */
+export type CustomKeycodeAction = CustomAction | ByLanguageAction;
+
 /** Leader key sequence: QK_LEAD, then 1–5 keys → action. */
 export interface LeaderSequence {
   id: string;
@@ -318,7 +343,7 @@ export interface CustomKeycode {
   /** C identifier: MY_KEY. */
   name: string;
   description: string;
-  action: CustomAction;
+  action: CustomKeycodeAction;
   /** Repeat while held; works only with an action (a ticked keycode with action none is kept but ignored). */
   repeat?: boolean;
 }
@@ -353,6 +378,14 @@ export interface TapHoldSetting {
   holdOnLists?: string[];
   /** Hold keys that count only while one language is active (since format 13). */
   holdOnByLanguage?: LanguageHoldKeys[];
+  /** Pressing a key at one of these spots (matrix row / col, whatever it types) makes it a hold at once (since format 19). */
+  holdOnSpots?: KeySpot[];
+}
+
+/** A physical key position: the firmware matrix row and column, as the keymap stores keys. */
+export interface KeySpot {
+  row: number;
+  col: number;
 }
 
 /** Hold keys of a tap-hold setting that count only in one language. */
@@ -445,6 +478,11 @@ export interface FirmwareConfig {
    */
   pipeline?: { enabled: boolean; headers: string[] };
   /**
+   * The header that defines the secret text steps' values (since format 19): a relative path in the keymap folder.
+   * The user writes it; NAVI only names it in keymap.c (included when it exists) and never reads, writes or shows it.
+   */
+  secretsHeader: string;
+  /**
    * Layer keys bring their layer to the top: the layer turned on last wins and every layer above it (by number)
    * is hidden while it is on. NAVI's own setting (generated layer_state_set_user / layer_state_set_navi), not a define.
    */
@@ -455,6 +493,11 @@ export interface FirmwareConfig {
    * send-string key can say otherwise (`heldMods`).
    */
   liftHeldMods: boolean;
+  /**
+   * A second tap of a one-shot mod (OSM) key cancels the one-shot instead of holding it again (since format 19).
+   * NAVI's own C code in process_record; not written when ONESHOT_TAP_TOGGLE is set (QMK's lock needs the second tap).
+   */
+  oneShotCancel: boolean;
   /**
    * Let NAVI restart the keyboard into its bootloader (Raw HID packet, then reset_keyboard()), so “build + flash”
    * needs no key press. NAVI's own C code in keymap.c, not a define.
@@ -482,6 +525,35 @@ export interface FirmwareConfig {
    * it. Unset = QMK's own list, NAVI writes no caps-word code.
    */
   capsWordRules?: CapsWordRule[];
+  /**
+   * Indicator LEDs (since format 19): single LEDs on controller pins, each lit while any of its states is on.
+   * Empty = NAVI writes no LED code. Generated C: core/qmk/indicatorLeds.ts.
+   */
+  indicatorLeds: IndicatorLed[];
+  /**
+   * Count key presses (since format 23), to find the keys, layers and combos never used: one count per press of a spot
+   * on the layer its action came from (tap and hold apart for tap-hold keys) and one per combo that fired. 'off' = no C
+   * at all. 'board': counted in RAM, saved to the EEPROM every saveMinutes and on USB suspend, read by NAVI over Raw HID
+   * into <userData>/key-counts/<projectId>.json. 'program': the user's C (navi_key_count_user) sends them on and their
+   * program writes the counts file at programFile (core/project/keyCounts.ts, core/qmk/keyCounts.ts, docs/companion.md).
+   */
+  keyCounts: KeyCountsSettings;
+}
+
+/** What can light an indicator LED. */
+export type IndicatorState = 'caps-lock' | 'caps-word' | 'oneshot-shift' | 'oneshot-ctrl' | 'oneshot-alt' | 'oneshot-gui' | 'toggled-layer' | 'own-code';
+
+/**
+ * One indicator LED: the pin (QMK name, GP25 / B0 / A15), the half it sits on (split boards only; a board that is not
+ * split ignores it), lit by a low pin instead of a high one, and the states that light it (any of them).
+ * 'own-code' = the user's C function navi_led_user(index) says so.
+ */
+export interface IndicatorLed {
+  id: string;
+  side: 'left' | 'right';
+  pin: string;
+  activeLow: boolean;
+  states: IndicatorState[];
 }
 
 /**
@@ -505,6 +577,18 @@ export interface CapsWordRule {
  */
 export const TEXT_ROUTES = ['own-program', 'wincompose', 'alt-codes', 'linux'] as const;
 export type TextRoute = (typeof TEXT_ROUTES)[number];
+
+/** Where key press counts go (firmware.keyCounts.route): nowhere, the board's EEPROM, or the user's own program. */
+export const KEY_COUNT_ROUTES = ['off', 'board', 'program'] as const;
+export type KeyCountRoute = (typeof KEY_COUNT_ROUTES)[number];
+
+export interface KeyCountsSettings {
+  route: KeyCountRoute;
+  /** The board route: minutes between EEPROM saves (a save happens only when a count changed since the last one). */
+  saveMinutes: number;
+  /** The program route: the counts file the user's program writes (an absolute path; '' = not set). */
+  programFile: string;
+}
 
 /** A language the keyboard types in (since format 13). The first one is active at power-on. */
 export interface Language {

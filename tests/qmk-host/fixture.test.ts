@@ -8,6 +8,7 @@ import { it } from 'vitest';
 import { parseQmk } from '../../src/core/keycodes/codec';
 import { loadSpec } from '../../src/core/keycodes/spec';
 import { createBlankProject } from '../../src/core/project/factory';
+import { taskSwitcherKeycode } from '../../src/core/keycodes/taskSwitcher';
 import { languageKeycodes } from '../../src/core/project/languages';
 import { activeKeymap, setKeycodes } from '../../src/core/project/ops';
 import { ensureTapHold, pruneTapHoldActions } from '../../src/core/project/tapHoldActions';
@@ -99,6 +100,9 @@ export function hostProject(): Project {
   // Layer 3, reached by MO(3) on layer 1 (hold 30, then 20): 2 is KC_8, 13 transparent (layer 1's KC_A shows through).
   put(1, 20, q('MO(3)'));
   put(3, 2, q('KC_8'));
+  // The same keycodes as combo c8 on layer 3 (KC_A, KC_8) on other spots: no combo there
+  put(3, 7, q('KC_A'));
+  put(3, 8, q('KC_8'));
   const refs: Record<number, 'self'> = { 1: 'self', 2: 'self', 3: 'self' };
   return {
     ...p,
@@ -117,6 +121,8 @@ export function hostProject(): Project {
     firmware: {
       ...p.firmware,
       autoRepeat: { delay: 300, rate: 50 },
+      // counts_program_test.cpp is the user's navi_key_count_user
+      keyCounts: { route: 'program', saveMinutes: 30, programFile: '' },
       capsWordRules: [
         { id: 'cw-letters', keys: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((l) => q(`KC_${l}`)), shift: true },
         { id: 'cw-dot', keys: [q('KC_DOT')], shift: true, layers: [1] },
@@ -193,6 +199,13 @@ export function languageHostProject(): Project {
   put(2, 12, q('KC_1'));
   put(2, 13, q('C(KC_1)'));
   put(2, 14, q('KC_A'));
+  // Per-language actions: APOS types "'s" in English and "'" in the rest (Russian); a tap-hold key taps it and holds
+  // layer 2. DASH taps X, in Russian nothing.
+  const th = ensureTapHold(spec, p, q('QK_USER_1'), { type: 'layer', layer: 2, mods: 0 });
+  p = th.project;
+  put(0, 25, th.keycode);
+  put(0, 26, q('QK_USER_1'));
+  put(0, 27, q('QK_USER_2'));
   return {
     ...p,
     languages: [
@@ -200,7 +213,11 @@ export function languageHostProject(): Project {
       { id: 'ru', name: 'Russian', code: 'ru', plainKeys: false, layer: 3 },
     ],
     macros: [{ id: 'mc-0', index: 0, name: 'text', steps: [{ type: 'tap', keycode: q('KC_A') }, { type: 'text', text: 'hi' }, { type: 'tap', keycode: q('KC_B') }] }],
-    customKeycodes: [{ id: 'ck', name: 'HELLO', description: '', action: { type: 'send-string', text: 'ok' } }],
+    customKeycodes: [
+      { id: 'ck', name: 'HELLO', description: '', action: { type: 'send-string', text: 'ok' } },
+      { id: 'ck-apos', name: 'APOS', description: '', action: { type: 'by-language', byLanguage: [{ language: 'en', action: { type: 'send-string', text: "'s" } }], other: { type: 'send-string', text: "'" } } },
+      { id: 'ck-dash', name: 'DASH', description: '', action: { type: 'by-language', byLanguage: [{ language: 'ru', action: { type: 'none' } }], other: { type: 'tap', keycode: q('KC_X') } } },
+    ],
     tapDances: [
       {
         id: 'td-0',
@@ -253,15 +270,66 @@ export function languageHostProject(): Project {
   };
 }
 
+/**
+ * The options suite (options/options_test.cpp names the positions): hold spots of a tap-hold key and the one-shot
+ * cancel. A plain pure-QMK project, no tap dances or combos.
+ */
+export function optionsHostProject(): Project {
+  let p = createBlankProject('qmk host options', 4, 10, false);
+  const id = activeKeymap(p).id;
+  const put = (layer: number, n: number, v: number) => (p = setKeycodes(p, id, layer, [[Math.floor(n / 10), n % 10]], v));
+  put(0, 0, q('LT(1, KC_SPC)'));
+  put(0, 1, q('LGUI_T(KC_Q)'));
+  put(0, 2, q('KC_C'));
+  put(0, 3, q('MO(1)'));
+  put(0, 4, q('OSM(MOD_LSFT)'));
+  put(0, 5, q('KC_E'));
+  put(0, 6, q('KC_X'));
+  put(0, 13, q('KC_N'));
+  put(0, 39, q('KC_S'));
+  put(1, 5, q('KC_A'));
+  put(1, 6, taskSwitcherKeycode(spec)); // the task switcher key, on layer 1 (hold 3)
+  return {
+    ...p,
+    firmware: { ...p.firmware, oneShotCancel: true },
+    // Spots: 5 (E; layer 1: A), 13 (N) and 39 (S, the last row)
+    tapHolds: [{ id: 'th-q', keycodes: [q('LGUI_T(KC_Q)')], holdOnSpots: [{ row: 0, col: 5 }, { row: 1, col: 3 }, { row: 3, col: 9 }] }],
+  };
+}
+
+/**
+ * The key counts suite (counts/counts_test.cpp names the positions): the board route, layer keys on top, a combo.
+ */
+export function countsHostProject(): Project {
+  let p = createBlankProject('qmk host counts', 4, 10, false);
+  const id = activeKeymap(p).id;
+  const put = (layer: number, n: number, v: number) => (p = setKeycodes(p, id, layer, [[Math.floor(n / 10), n % 10]], v));
+  (['KC_A', 'LSFT_T(KC_B)', 'MO(1)', 'KC_C', 'KC_E', 'LT(2, KC_F)', 'KC_G', 'KC_H', 'MO(2)'] as const).forEach((k, n) => put(0, n, q(k)));
+  put(1, 3, q('KC_D'));
+  put(2, 3, q('KC_Z'));
+  return {
+    ...p,
+    combos: [{ id: 'cx', name: 'gh_x', keys: [[0, 6], [0, 7]], result: q('KC_X') }],
+    firmware: { ...p.firmware, layerKeysOnTop: true, keyCounts: { route: 'board', saveMinutes: 30, programFile: '' } },
+  };
+}
+
 const write = (dir: string, p: Project) => {
   const res = generateKeymap({ project: p, keymap: activeKeymap(p), spec, via: false, encoderCount: 0 });
   const errors = res.issues.filter((i) => i.level === 'error');
   if (errors.length) throw new Error(JSON.stringify(errors));
   mkdirSync(dir, { recursive: true });
   for (const f of res.files) writeFileSync(join(dir, f.name), f.text);
+  const k = res.keyCounts;
+  if (k) {
+    const expect = [`#define NAVI_EXPECT_COUNTERS ${k.counters}`, `#define NAVI_EXPECT_HASH 0x${k.hash.toString(16)}UL`, `#define NAVI_EXPECT_ROWS ${k.rows}`, `#define NAVI_EXPECT_COLS ${k.cols}`];
+    writeFileSync(join(dir, 'counts_expect.h'), ['#pragma once', ...expect, ''].join('\n'));
+  }
 };
 
 it.skipIf(!out)('writes the generated keymap files for the QMK host tests', () => {
   write(out!, hostProject());
   write(join(out!, 'languages'), languageHostProject());
+  write(join(out!, 'options'), optionsHostProject());
+  write(join(out!, 'counts'), countsHostProject());
 });

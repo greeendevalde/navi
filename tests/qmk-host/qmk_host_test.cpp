@@ -16,7 +16,7 @@
 //   36 37 Y U → G, only with layer 1 on top   38 39 I O → X on layer 0, Y on layer 1
 //   24 LSFT_T(KC_A) holds when KC_Z is pressed   25 26 K L → Z
 //   27 28 F H → the every-tap dance at 16
-//   13 2 on layer 3 (13 transparent there, 2 KC_8) → 9, only with layer 3 on top
+//   13 2 on layer 3 (13 transparent there, 2 KC_8) → 9, only with layer 3 on top; layer 3: 7 KC_A, 8 KC_8 (no combo)
 // Auto repeat (delay 300 ms, rate 50 ms), on layer 2 (hold 31):
 //   5 MC_0 taps A, repeats   6 REP_KEY types "b", repeats   7 MC_1 taps C, doesn't repeat
 // Caps Word rules (letters shifted; "." shifted only with layer 1 on top; TD at 10 keeps it on; any other key ends it):
@@ -211,6 +211,12 @@ TEST_F(NaviHost, combo_with_a_transparent_key_fires_by_the_key_of_the_layer_unde
     EXPECT_EQ(play({"+30", "+20", "+13", "+2", "-13", "-2", "-20", "-30"}), "9 -");
 }
 
+// The same keycodes on other spots of layer 3 (7 KC_A, 8 KC_8) are no combo: QMK matches keycodes, NAVI's combo is
+// its key spots
+TEST_F(NaviHost, combo_keycodes_on_other_spots_type_their_keys) {
+    EXPECT_EQ(play({"+30", "+20", "+7", "+8", "-7", "-8", "-20", "-30"}), "A A+8 8 -");
+}
+
 // Layer 1's key let go while layer 3 stays held: 13 falls through to layer 0's KC_N
 TEST_F(NaviHost, combo_with_a_transparent_key_fires_by_the_base_key_once_the_layer_under_it_is_off) {
     EXPECT_EQ(play({"+30", "+20", "-30", "+13", "+2", "-13", "-2", "-20"}), "9 -");
@@ -249,6 +255,12 @@ TEST_F(NaviHost, mod_tap_tapped_before_a_combo_taps) {
 // C6: a combo whose result is the every-tap dance at 16 ("!", Shift: "->"); alone it types "!"
 TEST_F(NaviHost, combo_result_every_tap_dance_types_its_first_step) {
     EXPECT_EQ(play({"+27", "+28", "-27", "-28"}, false), "LSFT LSFT+1 LSFT -");
+}
+
+// The combo pressed twice is the dance's second tap ("="): its own keys' presses must not end the dance before
+// process_combo takes them
+TEST_F(NaviHost, combo_result_every_tap_dance_tapped_twice_types_its_second_step) {
+    EXPECT_EQ(play({"+27", "+28", "-27", "-28", "+27", "+28", "-27", "-28"}, false), "LSFT LSFT+1 LSFT - 0x2E -");
 }
 
 // A hold-preferred LSFT_T (1) rolled into the combo holds, and the dance plays its Shift variant

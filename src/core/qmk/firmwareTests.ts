@@ -9,16 +9,20 @@
  */
 import { decode, toQmk, type NameContext } from '../keycodes/codec';
 import type { KeycodeSpec } from '../keycodes/spec';
+import { isTaskSwitcher, TASK_SWITCHER_NAME } from '../keycodes/taskSwitcher';
 import { comboKeyOn, comboRefsMixed, comboStacks, qmkCombos } from '../features/advanced';
 import { aliasLookup } from '../project/aliases';
 import { CAPS_WORD_QMK_DEFAULT, capsWordEveryLayer, capsWordRuleKeys } from '../project/capsWord';
 import { languageKeyOf } from '../project/languages';
+import { firstLanguageAction } from '../project/languageActions';
 import { layerRefs, type LayerRef } from '../project/layerRefs';
 import { activeKeymap } from '../project/ops';
 import { effectiveTapHolds } from '../project/tapHolds';
+import { oneShotCancelActive } from './oneShotCancel';
 import { tapHoldActionLookup, type OwnCodeFile } from '../project/tapHoldActions';
 import { cleanC } from './customCode';
 import { tapDanceKind } from '../project/tapDances';
+import { isTextStep } from '../project/textSteps';
 import type { HoldAction, Keymap, MacroStep, MatrixPos, Project, TapDance } from '../project/types';
 import { layerIdentifiers } from './generate';
 import { liftOf, liftSetting } from './heldMods';
@@ -181,7 +185,14 @@ interface Behavior {
   /** A layer key that changes the layers by a tap (TG / TO / DF / OSL). */
   tapLayer?: { how: 'TG' | 'TO' | 'DF' | 'OSL'; layer: number };
   capsWord?: boolean;
+  /** The task switcher key: its tap opens the switcher, a second one moves (Tab), leaving its layer picks (Enter). */
+  switcher?: boolean;
 }
+
+/** What the task switcher key sends (qmk/taskSwitcher.ts): Ctrl+Alt+Tab (weak mods) down on the press, up on the release, then Enter. */
+const weakTap = (mods: number, code: number): Op[] => [{ t: 'weak+', mods }, { t: 'down', code }, { t: 'up', code }, { t: 'weak-', mods }];
+const SWITCHER_OPEN = weakTap(0x05, 0x2b);
+const SWITCHER_PICK: Op[] = [{ t: 'down', code: 0x28 }, { t: 'up', code: 0x28 }];
 
 const NOTHING: Press = { down: [], up: [] };
 
@@ -267,17 +278,20 @@ function textOps(text: string): Op[] | Why {
 const lifted = (ops: Op[], lift: boolean): Op[] => (lift && ops.length ? [{ t: 'lift' }, ...ops, { t: 'lower' }] : ops);
 
 /** Macro steps (tap_code / register_code of basic keys, send_string) as ops; `lift`: the held mods are let go for all of it. */
-function macroOps(steps: MacroStep[], lift: boolean): Op[] | Why {
+function macroOps(c: Ctx, steps: MacroStep[], lift: boolean): Op[] | Why {
   const ops: Op[] = [];
   for (const s of steps) {
     if (s.type === 'delay') continue;
+    // NAVI never knows a secret's value (secretText.ts), so it can't say what the keys type.
+    if (s.type === 'secret') return { why: 'secret text: its value is in your secrets header, which NAVI never reads' };
     if (s.type === 'text') {
       const t = textOps(s.text);
       if (isWhy(t)) return t;
       ops.push(...t);
       continue;
     }
-    const p = basicPress(s.keycode & 0xff);
+    // A key with mods or anything NAVI plays as a key event (above 0x1FFF: not modeled, so plainPress says why).
+    const p = s.keycode <= 0xff ? basicPress(s.keycode) : plainPress(c, s.keycode);
     if (isWhy(p)) return p;
     if (s.type === 'tap') ops.push(...tapOps(p));
     else ops.push(...(s.type === 'down' ? p.down : p.up));
@@ -306,6 +320,7 @@ function behavior(c: Ctx, v: number, thActions: Map<number, { tap: number; hold:
     }
     return { tap, hold: plainPress(c, h.keycode), term };
   }
+  if (isTaskSwitcher(spec, v)) return { tap: { down: SWITCHER_OPEN.slice(0, 2), up: SWITCHER_OPEN.slice(2) }, term: 0, switcher: true };
   const lang = languageKeyOf(spec, project, v);
   if (lang) return why(`${c.kc(v)}, a language key (the tests type in the first language)`);
   const d = decode(spec, v, { unicode: project.firmware.unicode });
@@ -362,18 +377,21 @@ function namedBehavior(c: Ctx, v: number, key: string): Behavior {
     const m = project.macros.find((x) => x.index === index);
     if (!m || !m.steps.length) return why(`${c.kc(v)}, a macro with no steps`);
     if (project.firmware.buildFeatures.via === true) return why(`${c.kc(v)}, a VIA macro (the keyboard's memory decides it)`);
-    const ops = macroOps(m.steps, liftOf(project, m.heldMods));
+    const ops = macroOps(c, m.steps, liftOf(project, m.heldMods));
     return isWhy(ops) ? why(`${c.kc(v)}: ${ops.why}`) : { tap: { down: ops, up: [] }, term: 0 };
   }
   if (range('QK_USER')) {
     const index = v - spec.rangeByDefine.get('QK_USER')!.start;
     const ck = project.customKeycodes[index];
     if (!ck || ck.action.type === 'none') return why(`${c.kc(v)}, a custom keycode your code handles`);
-    if (ck.action.type === 'send-string') {
-      const ops = textOps(ck.action.text);
-      return isWhy(ops) ? why(`${c.kc(v)}: ${ops.why}`) : { tap: { down: lifted(ops, liftOf(project, ck.action.heldMods)), up: [] }, term: 0 };
+    // A per-language key: the tests type in the first language, so its action there.
+    const action = firstLanguageAction(project, ck.action);
+    if (action.type === 'none') return { tap: NOTHING, term: 0 };
+    if (action.type === 'send-string') {
+      const ops = textOps(action.text);
+      return isWhy(ops) ? why(`${c.kc(v)}: ${ops.why}`) : { tap: { down: lifted(ops, liftOf(project, action.heldMods)), up: [] }, term: 0 };
     }
-    const p = plainPress(c, ck.action.keycode);
+    const p = plainPress(c, action.keycode);
     return isWhy(p) ? why(`${c.kc(v)} taps ${p.why}`) : { tap: { down: tapOps(p), up: [] }, term: 0 };
   }
   if (range('QK_LIGHTING')) return { tap: NOTHING, term: 0 };
@@ -387,6 +405,7 @@ function slotPress(c: Ctx, v: number): Press | Why {
   if (d.kind === 'mod-tap' || d.kind === 'layer-tap') return basicPress(d.base);
   if (d.kind === 'layer' || d.kind === 'layer-mod') return d.kind === 'layer-mod' ? { down: [{ t: 'mods+', mods: reportMods(d.mods) }], up: [{ t: 'mods-', mods: reportMods(d.mods) }] } : NOTHING;
   if (d.kind === 'basic' || d.kind === 'mods') return plainPress(c, v);
+  if (isTaskSwitcher(c.spec, v)) return { why: `${c.kc(v)}, the task switcher key in a slot (its pick on leaving the layer isn't modeled there)` };
   const b = behavior(c, v, new Map());
   return isWhy(b.tap) ? b.tap : b.tap;
 }
@@ -411,6 +430,8 @@ interface Route {
   /** Spots the route keeps held (not tapped by tests). */
   held: string[];
   label: string;
+  /** The newest step holds a layer: its release turns the layer off after this many `end` ops (its own mods). */
+  leaveAt?: number;
 }
 
 const spotName = ([r, col]: MatrixPos) => `r${r}c${col}`;
@@ -475,7 +496,8 @@ export function firmwareTestsFile(project: Project, spec: KeycodeSpec, ownCode?:
   const nameCtx: NameContext = {
     layerName: (l) => names[l],
     tapDanceName: (i) => project.tapDances.find((t) => t.index === i)?.name,
-    customName: (v) => (v >= customStart && v < customStart + project.customKeycodes.length ? project.customKeycodes[v - customStart].name : undefined),
+    customName: (v) =>
+      v >= customStart && v < customStart + project.customKeycodes.length ? project.customKeycodes[v - customStart].name : isTaskSwitcher(spec, v) ? TASK_SWITCHER_NAME : undefined,
   };
   const kc = (v: number) => toQmk(spec, v, nameCtx, { unicode: project.firmware.unicode });
   const num = (key: string, fallback: number) => {
@@ -579,10 +601,16 @@ export function firmwareTestsFile(project: Project, spec: KeycodeSpec, ownCode?:
         if (follow) {
           const p = follow.press;
           withRoute(route, [s, follow.spot], [{ t: 'weak+', mods: b.oneShot }, ...p.down, { t: 'weak-', mods: b.oneShot }, ...p.up]);
+          // A second tap lets the one-shot go: the next key is typed plain.
+          if (oneShotCancelActive(project)) withRoute(route, [s, s, follow.spot], tapOps(p));
         }
         continue;
       }
       if (isWhy(b.tap)) continue;
+      if (b.switcher) {
+        switcherTests(c, route, s, out);
+        continue;
+      }
       const ops = tapOps(b.tap);
       if (textRouted(ops)) continue;
       withRoute(route, [s], ops);
@@ -619,6 +647,10 @@ export function firmwareTestsFile(project: Project, spec: KeycodeSpec, ownCode?:
   const qmk = project.combos.flatMap((cb) => qmkCombos(keymap, cols, cb, stacks));
   for (const cb of project.combos) {
     const result = behaviorOf(cb.result);
+    if (result.switcher) {
+      out.notChecked.push(`combo ${cb.name}: the task switcher key (its pick on leaving the layer isn't modeled for combos)`);
+      continue;
+    }
     if (isWhy(result.tap) || result.oneShot) {
       out.notChecked.push(`combo ${cb.name}: ${isWhy(result.tap) ? result.tap.why : 'one-shot mods'}`);
       continue;
@@ -643,6 +675,9 @@ export function firmwareTestsFile(project: Project, spec: KeycodeSpec, ownCode?:
 
   // Caps Word: the caps word key, then a key, then a letter it shifts.
   capsWordTests(c, routes, spots, behaviorOf, out);
+
+  // Hold spots: a tap-hold key held, then a key at one of its spots pressed before the term ends → the hold.
+  holdSpotTests(c, settings, routes, spots, behaviorOf, out, withRoute);
 
   const header = [
     `# navi_tests.txt: written by NAVI from "${lineText(project.name).replace(/"/g, "'")}". Don't edit: NAVI rewrites it.`,
@@ -737,6 +772,7 @@ function routeInto(c: Ctx, from: Route, target: number, refs: LayerRef[], behavi
       end: [...(mods ? [{ t: 'mods-', mods } as Op] : []), ...from.end],
       held: [...from.held, s],
       label: `${from.label === 'at power-on' ? '' : `${from.label}, then `}holding ${s} (${c.kc(r.keycode)})`,
+      leaveAt: mods ? 1 : 0,
     };
   }
   // Tap-type routes: only from the power-on state with nothing held (the tap must not be mixed with a held key).
@@ -802,7 +838,7 @@ function danceTests(c: Ctx, td: TapDance, at: { route: Route; pos: MatrixPos }, 
     for (let n = 1; n <= steps.length; n++) {
       const st = steps[n - 1];
       if (!st.none) return skip(`tap ${n}`, 'no step without modifiers');
-      const ops = macroOps(st.none, liftSetting(c.project) && st.none.some((x) => x.type === 'text'));
+      const ops = macroOps(c, st.none, liftSetting(c.project) && st.none.some(isTextStep));
       if (isWhy(ops)) return skip(`tap ${n}`, ops.why);
       played.push(...ops);
       lines.push([[n === 1 ? s : `${s}*${n}`], [...played]]);
@@ -824,6 +860,26 @@ function danceTests(c: Ctx, td: TapDance, at: { route: Route; pos: MatrixPos }, 
   for (const [steps, ops] of lines) withRoute(at.route, steps, ops);
 }
 
+/**
+ * The task switcher key at spot `s`, tapped once and twice on a route. When the route's newest step holds the layer
+ * the key is on, letting that key go picks the window: Enter, right after that release (and its own mods' release).
+ */
+function switcherTests(c: Ctx, route: Route, s: string, out: Section): void {
+  const top = topLayer(c, route.state);
+  if (c.project.languages.some((l) => l.layer === top)) {
+    out.notChecked.push(`${s} on layer ${top}: the task switcher key on a language's layer (NAVI keeps that layer on)`);
+    return;
+  }
+  const leave = route.leaveAt !== undefined && top !== route.state.base ? route.leaveAt : undefined;
+  const end = leave === undefined ? route.end : [...route.end.slice(0, leave), ...SWITCHER_PICK, ...route.end.slice(leave)];
+  for (const [steps, ops] of [
+    [[s], SWITCHER_OPEN],
+    [[s, s], [...SWITCHER_OPEN, ...SWITCHER_OPEN]],
+  ] as const) {
+    out.tests.push(`${[...route.before, ...steps, ...route.after].join(' ')} => ${new Typist().run([...route.start, ...ops, ...end]).text()}`);
+  }
+}
+
 function overrideTests(c: Ctx, o: Project['keyOverrides'][number], routes: Map<number, Route>, spots: MatrixPos[], behaviorOf: (v: number) => Behavior, out: Section): void {
   const need = o.mods & 0x0f;
   const why = (reason: string): void => void out.notChecked.push(`key override ${lineText(o.name)}: ${reason}`);
@@ -836,6 +892,7 @@ function overrideTests(c: Ctx, o: Project['keyOverrides'][number], routes: Map<n
   // ko_make_basic suppresses the trigger mods, either side (NAVI writes MOD_MASK_*).
   const suppress = (need & 1 ? 0x11 : 0) | (need & 2 ? 0x22 : 0) | (need & 4 ? 0x44 : 0) | (need & 8 ? 0x88 : 0);
   const triggerB = behaviorOf(o.trigger);
+  if (triggerB.switcher) return why('the trigger is the task switcher key');
   if (isWhy(triggerB.tap) || triggerB.hold) return why(`the trigger ${isWhy(triggerB.tap) ? triggerB.tap.why : `${c.kc(o.trigger)} has a hold`}`);
   for (const li of c.keymap.layers.map((_, i) => i)) {
     const route = routes.get(li);
@@ -871,6 +928,43 @@ function overrideTests(c: Ctx, o: Project['keyOverrides'][number], routes: Map<n
 
 /** Report mods `bits` are the override's (either side) mods exactly. */
 const sameMods = (bits: number, need: number) => ((bits | (bits >> 4)) & 0x0f) === need && (bits & 0x0f ? !(bits & 0xf0) : true);
+
+/**
+ * Hold spots (TapHoldSetting.holdOnSpots): the tap-hold key is pressed, a key at one of its spots is tapped well inside
+ * the tapping term, and the tap-hold key is released. The press at the spot makes it a hold at once (whatever the
+ * flavor says), so the plain key comes out with the hold's modifiers. Keys whose hold is a layer are left to the
+ * hold-past-the-term test (the spot's key would be looked up on another layer).
+ */
+function holdSpotTests(c: Ctx, settings: ReturnType<typeof effectiveTapHolds>, routes: Map<number, Route>, spots: MatrixPos[], behaviorOf: (v: number) => Behavior, out: Section, withRoute: WithRoute): void {
+  for (const s of settings) {
+    if (!s.holdOnSpots?.length) continue;
+    for (const keycode of s.keycodes) {
+      const b = behaviorOf(keycode);
+      if (!b.hold || isWhy(b.hold) || b.holdLayer !== undefined || b.term < 30) continue;
+      const at = findSpot(c, routes, spots, (v) => v === keycode);
+      if (!at) continue;
+      const th = spotName(at.pos);
+      const cands: { name: string; ops: Op[] }[] = [];
+      for (const sp of s.holdOnSpots) {
+        const pos: MatrixPos = [sp.row, sp.col];
+        const name = spotName(pos);
+        if (name === th || at.route.held.includes(name) || !spots.some((q) => q[0] === sp.row && q[1] === sp.col)) continue;
+        const { value } = keyAt(c, at.route.state, pos);
+        if (!(value >= KC_A && value <= 0x1d)) continue;
+        const f = behaviorOf(value);
+        if (isWhy(f.tap) || f.hold) continue;
+        const ops = [...b.hold.down, ...f.tap.down, ...f.tap.up, ...b.hold.up];
+        if (c.routed && ops.some((o) => o.t === 'down' && printable(o.code))) continue;
+        cands.push({ name, ops });
+      }
+      // The first, the middle and the last spot that qualify (a whole half would be dozens of lines).
+      const picked = [...new Set([0, Math.floor((cands.length - 1) / 2), cands.length - 1])].filter((i) => i >= 0 && i < cands.length).map((i) => cands[i]);
+      if (picked.length) out.tests.push(`# Hold spots of ${c.kc(keycode)}: held, then a key at one of its spots pressed before the term ends; ${at.route.label}`);
+      for (const p of picked) withRoute(at.route, [`+${th}`, p.name, `-${th}`], p.ops);
+      if (!cands.length) out.notChecked.push(`hold spots of ${c.kc(keycode)}: no plain letter at one of its spots on the layer of the key`);
+    }
+  }
+}
 
 function capsWordTests(c: Ctx, routes: Map<number, Route>, spots: MatrixPos[], behaviorOf: (v: number) => Behavior, out: Section): void {
   const cwValue = c.spec.byName.get('QK_CAPS_WORD_TOGGLE')?.value;

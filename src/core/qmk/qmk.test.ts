@@ -442,10 +442,11 @@ describe('leader key and unicode map', async () => {
     expect(c).toContain('void leader_end_user(void) {');
     expect(c).toContain('    if (leader_sequence_two_keys(KC_D, KC_D)) {\n        { uint8_t navi_held = navi_lift_mods(); SEND_STRING("hi \\"you\\""); navi_lower_mods(navi_held); }');
     expect(c).toContain('    } else if (leader_sequence_one_key(KC_E)) {\n        tap_code16(LCTL(KC_A));');
-    expect(c).not.toContain('LCTL_T(KC_A))');
+    // A tap-hold key in a sequence is its tap key: what QMK's leader records for it.
+    expect(c).toContain('    } else if (leader_sequence_one_key(KC_A)) {\n        tap_code16(KC_B);');
     expect(res.rules.LEADER_ENABLE).toBe('yes');
     expect(res.issues.some((i) => i.where === 'QK_LEAD')).toBe(true);
-    expect(res.issues.some((i) => i.where === 'leader #3' && i.level === 'error')).toBe(true);
+    expect(res.issues.some((i) => i.where === 'leader #3')).toBe(false);
   });
 
   it('unicode_map: table, UM(i) outside the table is an error', () => {
@@ -538,7 +539,7 @@ describe('own pipeline mode', async () => {
     };
   };
   const QMK_HOOKS = ['process_record_user', 'get_tapping_term', 'pre_process_record_user', 'get_combo_term', 'combo_should_trigger', 'leader_end_user'];
-  const NAVI_FNS = ['navi_raw_hid_receive', 'process_record_navi', 'get_tapping_term_navi', 'get_combo_term_navi', 'combo_should_trigger_navi', 'leader_end_navi', 'layer_state_set_navi', 'get_quick_tap_term_navi', 'get_hold_on_other_key_press_navi', 'get_permissive_hold_navi', 'pre_process_record_navi', 'combo_ref_from_layer_navi', 'process_combo_event_navi', 'keyboard_post_init_navi', 'caps_word_press_navi'];
+  const NAVI_FNS = ['navi_raw_hid_receive', 'process_record_navi', 'get_tapping_term_navi', 'get_combo_term_navi', 'combo_should_trigger_navi', 'leader_end_navi', 'layer_state_set_navi', 'get_quick_tap_term_navi', 'get_hold_on_other_key_press_navi', 'get_permissive_hold_navi', 'pre_process_record_navi', 'combo_ref_from_layer_navi', 'process_combo_event_navi', 'keyboard_post_init_navi', 'caps_word_press_navi', 'housekeeping_task_navi', 'suspend_power_down_navi', 'navi_leds_update', 'navi_leds_mark_toggled'];
   const defines = (c: string, name: string) => new RegExp(`^\\w[\\w ]*\\b${name}\\([^;]*\\)\\s*\\{`, 'm').test(c);
 
   it('file set: keymap.c, navi.h, navi_rules.mk, navi_config.h — never rules.mk / config.h', () => {
@@ -679,7 +680,7 @@ describe('own pipeline mode', async () => {
         expect(defines(c, 'navi_layers_on')).toBe(true);
         expect(defines(c, 'navi_layer_off')).toBe(true);
         expect(c).toContain('static layer_state_t navi_wanted');
-        expect(c).toMatch(/bool process_record_user\(uint16_t keycode, keyrecord_t \*record\) \{\n {4}navi_layer_keys\(keycode, record\);/);
+        expect(c).toMatch(/bool process_record_user\(uint16_t keycode, keyrecord_t \*record\) \{\n(?:#ifdef LEADER_ENABLE\n[\s\S]*?\n#endif\n)? {4}navi_layer_keys\(keycode, record\);/);
         expect(c).not.toContain('_navi(');
         for (const s of ['layer_state_set_user', 'process_record_user', 'navi_layers_on', 'navi_layer_off']) expect(res.symbols.has(s), s).toBe(true);
       }
@@ -706,7 +707,7 @@ describe('own pipeline mode', async () => {
       expect(defines(c, 'layer_state_set_navi')).toBe(true);
       expect(defines(c, 'layer_state_set_user')).toBe(false);
       expect(c).not.toContain('    return state;\n}');
-      expect(c).toMatch(/bool process_record_navi\(uint16_t keycode, keyrecord_t \*record\) \{\n {4}navi_layer_keys\(keycode, record\);/);
+      expect(c).toMatch(/bool process_record_navi\(uint16_t keycode, keyrecord_t \*record\) \{\n(?:#ifdef LEADER_ENABLE\n[\s\S]*?\n#endif\n)? {4}navi_layer_keys\(keycode, record\);/);
       const warn = res.issues.filter((i) => i.where.startsWith('own pipeline'));
       expect(warn.map((i) => i.where)).toEqual(['own pipeline: process_record_user()', 'own pipeline: layer_state_set_user()']);
       expect(warn[1].message.en).toContain('return layer_state_set_navi(state);');

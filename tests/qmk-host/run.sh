@@ -7,7 +7,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 out=$(cd "$1" && pwd)
 qmk_home=${QMK_HOME:-$HOME/qmk_firmware}
 status=0
-for suite in main languages; do
+for suite in main languages options counts; do
     if [ "$suite" = main ]; then dir=$here; files=$out; else dir=$here/$suite; files=$out/$suite; fi
     build=$(mktemp -d /tmp/navi-qmk-host.XXXXXX)
     # The test build takes the test folder relative to qmk_firmware (absolute paths break its object paths)

@@ -185,6 +185,14 @@ export interface NaviBridge {
     /** Moves the file to themes/.trash; its text, or null when there was none. */
     remove(id: string): Promise<string | null>;
   };
+  /** Key press counts files (electron/keyCounts.cjs); the text is parsed by parseKeyCounts. */
+  keyCounts: {
+    /** The board route's file, <userData>/key-counts/<projectId>.json: its text, or null before the first read. */
+    readBoard(projectId: string): Promise<string | null>;
+    writeBoard(projectId: string, text: string): Promise<void>;
+    /** The program route's file (an absolute .json path): its text, or null when it doesn't exist. */
+    readFile(path: string): Promise<string | null>;
+  };
   onConfigChanged(cb: (text: string) => void): () => void;
   setTitleBarColors(colors: { color: string; symbolColor: string }): Promise<void>;
   /** Interface size: the window's zoom factor (0.8…2). */

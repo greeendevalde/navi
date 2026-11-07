@@ -6,7 +6,7 @@
  *  3) add a test with an old file (project.test.ts).
  * Files NEWER than the app do not open (so unknown fields are not lost).
  */
-import { AUTO_REPEAT_DEFAULT, TEXT_ROUTE_DEFAULT } from './factory';
+import { AUTO_REPEAT_DEFAULT, KEY_COUNTS_DEFAULT, SECRETS_HEADER_DEFAULT, TEXT_ROUTE_DEFAULT } from './factory';
 import { PROJECT_SCHEMA_VERSION } from './types';
 
 type Data = Record<string, unknown>;
@@ -91,6 +91,32 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
     const f = d.firmware;
     if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 18 }; // validate reports it
     return { ...d, schemaVersion: 18, firmware: { ...(f as Data), liftHeldMods: true } };
+  },
+  // 18 → 19: firmware.oneShotCancel (off for older files); TapHoldSetting.holdOnSpots is optional.
+  18: (d) => {
+    const f = d.firmware;
+    if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 19 }; // validate reports it
+    return { ...d, schemaVersion: 19, firmware: { ...(f as Data), oneShotCancel: false } };
+  },
+  // 19 → 20: an own keycode's action may be per language (`by-language`); older files have none, nothing to change.
+  19: (d) => ({ ...d, schemaVersion: 20 }),
+  // 20 → 21: secret text steps (macros, every-tap dances) read their defines from firmware.secretsHeader.
+  20: (d) => {
+    const f = d.firmware;
+    if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 21 }; // validate reports it
+    return { ...d, schemaVersion: 21, firmware: { ...(f as Data), secretsHeader: SECRETS_HEADER_DEFAULT } };
+  },
+  // 21 → 22: indicator LEDs (firmware.indicatorLeds), none for older files.
+  21: (d) => {
+    const f = d.firmware;
+    if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 22 }; // validate reports it
+    return { ...d, schemaVersion: 22, firmware: { ...(f as Data), indicatorLeds: [] } };
+  },
+  // 22 → 23: counting key presses (firmware.keyCounts), off for older files.
+  22: (d) => {
+    const f = d.firmware;
+    if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 23 }; // validate reports it
+    return { ...d, schemaVersion: 23, firmware: { ...(f as Data), keyCounts: { ...KEY_COUNTS_DEFAULT } } };
   },
 };
 

@@ -32,6 +32,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { setLanguage, t } from './i18n';
 import { lastProjectId, useProjectStore } from './store/projectStore';
 import { useDeviceStore } from './store/deviceStore';
+import { watchKeyCounts } from './store/keyCountsStore';
 import { useSettingsStore } from './store/settingsStore';
 import { applyTheme } from './theme/applyTheme';
 
@@ -106,6 +107,7 @@ export function App() {
       else navigate({ section: 'projects', tab: 'new' }, { replace: true });
     });
     void useDeviceStore.getState().refresh();
+    watchKeyCounts();
   }, []);
 
   // A project was opened/created — connect to its keyboard if it is plugged in and auto-connect is on.

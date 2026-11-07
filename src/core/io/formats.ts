@@ -331,6 +331,8 @@ export function stepsToViaMacro(steps: MacroStep[], spec: KeycodeSpec): string {
       switch (s.type) {
         case 'text':
           return s.text.replace(/[{}]/g, '');
+        case 'secret':
+          return ''; // a VIA macro can't hold a secret (secretText.ts)
         case 'delay':
           return `{${s.ms}}`;
         case 'tap':

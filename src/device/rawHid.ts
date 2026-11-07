@@ -1,7 +1,8 @@
 /**
  * One packet to a keyboard's Raw HID interface by its usage page / usage (QMK's RAW_USAGE_PAGE / RAW_USAGE_ID, which a
  * build may change: the owner's is 0xFF71). Used for NAVI's "restart into the bootloader" message, which gets no
- * reply: whether it worked is decided only by the bootloader appearing (src/lib/buildFlash.ts).
+ * reply: whether it worked is decided only by the bootloader appearing (src/lib/buildFlash.ts). Key counts on the
+ * board are read through a session (openRawSession): a packet out, the keyboard's answer back.
  * Windows opens HID devices shared, so a program keeping its handle open (py_qmk) doesn't block this.
  */
 import { REPORT_SIZE } from '../core/via/protocol';
@@ -41,6 +42,68 @@ export function pickRawTarget<T extends RawTarget>(devices: readonly T[], expect
 }
 
 export type RawSendResult = { sent: true; device: RawTarget; error?: string } | { sent: false; why: 'none' | 'several' | 'unsupported' | 'unopened'; error?: string };
+
+/** A Raw HID conversation with one keyboard: packets out, the keyboard's answer (an input report) back. */
+export interface RawSession {
+  device: RawTarget;
+  /** Sends a packet and waits for the first input report `accept` takes (null on timeout). */
+  exchange(packet: Uint8Array, accept: (report: Uint8Array) => boolean, timeoutMs?: number): Promise<Uint8Array | null>;
+  close(): Promise<void>;
+}
+
+export type RawSessionResult = { ok: true; session: RawSession } | { ok: false; why: 'none' | 'several' | 'unsupported' | 'unopened'; error?: string };
+
+/**
+ * Opens a session with the keyboard pickRawTarget picks (NAVI's key counts packets, src/core/qmk/keyCounts.ts).
+ * A device another part of NAVI has open (VIA) stays open after close().
+ */
+export async function openRawSession(page: number, usage: number, expect: { vid: number; pid: number } | null): Promise<RawSessionResult> {
+  if (!hidSupported()) return { ok: false, why: 'unsupported' };
+  const pick = pickRawTarget(await devicesWith(page, usage), expect);
+  if (pick === 'none' || pick === 'several') return { ok: false, why: pick };
+  const device = pick;
+  const openedHere = !device.opened;
+  try {
+    if (openedHere) await device.open();
+  } catch (err) {
+    return { ok: false, why: 'unopened', error: err instanceof Error ? err.message : String(err) };
+  }
+  const session: RawSession = {
+    device: { vendorId: device.vendorId, productId: device.productId, productName: device.productName },
+    exchange(packet, accept, timeoutMs = 1000) {
+      return new Promise((resolve, reject) => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const done = (r: Uint8Array | null) => {
+          clearTimeout(timer);
+          device.removeEventListener('inputreport', onReport);
+          resolve(r);
+        };
+        const onReport = (e: HIDInputReportEvent) => {
+          const r = new Uint8Array(e.data.buffer, e.data.byteOffset, e.data.byteLength);
+          if (accept(r)) done(r.slice());
+        };
+        device.addEventListener('inputreport', onReport);
+        timer = setTimeout(() => done(null), timeoutMs);
+        const payload = new Uint8Array(REPORT_SIZE);
+        payload.set(packet.subarray(0, REPORT_SIZE));
+        device.sendReport(0, payload).catch((err: unknown) => {
+          clearTimeout(timer);
+          device.removeEventListener('inputreport', onReport);
+          reject(err instanceof Error ? err : new Error(String(err)));
+        });
+      });
+    },
+    async close() {
+      if (!openedHere) return;
+      try {
+        if (device.opened) await device.close();
+      } catch {
+        // already gone
+      }
+    },
+  };
+  return { ok: true, session };
+}
 
 export async function sendRawPacket(page: number, usage: number, packet: Uint8Array, expect: { vid: number; pid: number } | null): Promise<RawSendResult> {
   if (!hidSupported()) return { sent: false, why: 'unsupported' };

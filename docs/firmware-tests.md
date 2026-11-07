@@ -49,9 +49,15 @@ spots included, as `KC_TRNS`), then one per combo and per tap dance.
 
 One line per left-out key, combo or slot, saying why: a custom keycode with no NAVI action (the user's C
 decides it), an own-C tap dance, `QK_BOOT` / `EE_CLR` / `QK_RBT` (they'd end the test), a key typed through a
-language's text route (the tests type in the first language). Also: a key whose alias C name the user's own C
-names (that code may change what it does), a VIA macro, a layer no key can turn on from power-on, a combo whose
+language's text route (the tests type in the first language, so a per-language custom keycode is tested
+with the first language's action). Also: a key whose alias C name the user's own C
+names (that code may change what it does), a VIA macro, a macro or every-tap dance step typing secret text (its
+value is in the user's secrets header, which NAVI never reads; the test build leaves that header out), a layer no
+key can turn on from power-on, a combo whose
 result is a tap dance, and a scenario whose text holds a word NAVI's file check refuses (`#include`, `incbin`).
+The task switcher key (`NAVI_TASK_SWITCH`) is tested on every layer it shows on, tapped once (`⟨C-A-TAB⟩`) and
+twice (`⟨C-A-TAB⟩⟨C-A-TAB⟩`), with `⟨ENT⟩` after the release of the layer key holding that layer; as a combo result, a
+tap dance or tap-hold slot, a key override's trigger or on a language's layer it's left out.
 The lines are for people to read; a harness skips the section.
 
 ### `[tests]`: scenarios and their expected output
@@ -115,17 +121,21 @@ after the run) with the player (`electron/firmwareTests/navi_tests_player.cpp`),
 
 - `config.h`: the project's matrix size in place of the test framework's 4 x 10, `QMK_KEYBOARD_H` as `quantum.h`,
   then the keymap folder's own `config.h`.
-- `test.mk`: the keymap folder's `rules.mk` (own pipeline: yours, with `navi_rules.mk` and your `SRC` files), the
-  keymap folder on `VPATH`, then these turned off, since the test platform has no stand-in for them and none changes
+- `test.mk`: the keymap folder's `rules.mk` (own pipeline: yours, with `navi_rules.mk` and your `SRC` files; `LIB_SRC`
+  files are compiled too, as a firmware build does), the keymap folder on `VPATH`, then these turned off, since the test platform has no stand-in for them and none changes
   what a key types: RGB Matrix, RGB Light, LED Matrix, backlight, OLED, ST7565, Quantum Painter, haptic, audio,
-  encoders, split, raw HID, VIA / Vial / dynamic keymap (it would replace the test fixture's key lookup), pointing
+  encoders, split, VIA / Vial / dynamic keymap (it would replace the test fixture's key lookup), pointing
   devices, PS/2, joystick, digitizer, MIDI, Bluetooth, DIP switches, NKRO (the player reads 6-key reports), console,
   LTO, steno, virtual serial, sleep LED, WPM.
 - Not read: keyboard-level files (`keyboards/<kb>/config.h`, `rules.mk`, `keyboard.json`), so a keyboard's own
   `TAPPING_TERM` or features are missing from the test build; `users/<keymap>` isn't on `VPATH`. A split board is
   built as its whole matrix on one board; `is_keyboard_left()` and `is_keyboard_master()` are QMK's defaults for a
   board that isn't split. Code that needs any of the features above (an RGB call outside `#ifdef RGB_MATRIX_ENABLE`)
-  can't build, and the run says so with the first compiler errors.
+  can't build, and the run says so with the first compiler errors. Raw HID stays as `rules.mk` sets it: the test
+  driver has no raw HID, so `raw_hid_send` goes nowhere.
+- `transactions.h` and `navi_tests_stubs.c`: stand-ins for QMK's split transactions, for own code that includes the
+  header outside `#ifdef SPLIT_KEYBOARD`: `transaction_register_rpc` does nothing, `transaction_rpc_send` / `_exec`
+  return true and read back zeros (there is no other half). Weak, so your own definitions win.
 
 Nothing is written into `qmk_firmware` or the keymap folder. The player registers every spot of every layer from the
 built keymap (`keycode_at_keymap_location_raw`), plays each scenario in a forked child (30 s at most), and prints one

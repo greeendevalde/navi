@@ -49,14 +49,20 @@ export const BOOTLOADER_HELPER_C = [
   '',
 ];
 
-/** The hook that owns the packet: VIA's via_command_kb, or raw_hid_receive without VIA (normal mode). */
-export function bootloaderHookC(via: boolean): string[] {
+/** NAVI's packet handlers (each true when the packet was its own) tried in turn. */
+const tryHandlers = (handlers: readonly string[]) => handlers.map((h) => `${h}(data, length)`).join(' || ');
+
+/**
+ * The hook that owns NAVI's packets (the bootloader restart, key counts): VIA's via_command_kb, or raw_hid_receive
+ * without VIA (normal mode). `handlers`: the static helpers to try, e.g. navi_bootloader_packet.
+ */
+export function rawHidHookC(via: boolean, handlers: readonly string[]): string[] {
   return via
-    ? ['bool via_command_kb(uint8_t *data, uint8_t length) {', '    return navi_bootloader_packet(data, length);', '}', '']
-    : ['void raw_hid_receive(uint8_t *data, uint8_t length) {', '    navi_bootloader_packet(data, length);', '}', ''];
+    ? ['bool via_command_kb(uint8_t *data, uint8_t length) {', `    return ${tryHandlers(handlers)};`, '}', '']
+    : ['void raw_hid_receive(uint8_t *data, uint8_t length) {', handlers.length > 1 ? `    (void)(${tryHandlers(handlers)});` : `    ${tryHandlers(handlers)};`, '}', ''];
 }
 
-/** Own pipeline: always defined; calls the helper only when the tick is on and VIA doesn't own the packet. */
-export function bootloaderPipelineHookC(handles: boolean): string[] {
-  return ['bool navi_raw_hid_receive(uint8_t *data, uint8_t length) {', handles ? '    return navi_bootloader_packet(data, length);' : '    return false;', '}'];
+/** Own pipeline: always defined; tries the helpers that are on and that VIA doesn't own (none: false). */
+export function rawHidPipelineHookC(handlers: readonly string[]): string[] {
+  return ['bool navi_raw_hid_receive(uint8_t *data, uint8_t length) {', handlers.length ? `    return ${tryHandlers(handlers)};` : '    return false;', '}'];
 }

@@ -225,7 +225,8 @@ describe('languages: generated C', () => {
     expect(body(c, 'void navi_switch_language(uint8_t language) {')).toContain('navi_switch_language_user(language);');
     expect(c).not.toContain('navi_lang_shortcuts');
     expect(c).toContain('tap_code(0x29);\n            navi_type_text("привет" "\\001\\001\\050", true);\n            wait_ms(50);\n            navi_type_text("a\\n", true);');
-    expect(c).toContain('navi_type_text("@team" "\\001\\002\\340" "\\001\\001\\050" "\\001\\003\\340", true);');
+    // ASCII text: one lift around the whole macro when the keyboard types it
+    expect(c).toContain('uint8_t navi_held = navi_typing_plain() ? navi_lift_mods() : 0;\n                navi_type_text("@team" "\\001\\002\\340" "\\001\\001\\050" "\\001\\003\\340", false);\n                navi_lower_mods(navi_held);');
     expect(c).toContain('case HELLO: navi_type_text("hi", true); return false;');
     expect(file(res, 'rules.mk')).not.toContain('UNICODE_ENABLE');
     expect(res.issues.some((i) => i.message.en.includes('navi_type_text_user'))).toBe(true);

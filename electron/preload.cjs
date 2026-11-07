@@ -23,6 +23,11 @@ contextBridge.exposeInMainWorld('navi', {
     write: invoke('navi:themes:write'),
     remove: invoke('navi:themes:remove'),
   },
+  keyCounts: {
+    readBoard: invoke('navi:key-counts:read-board'),
+    writeBoard: invoke('navi:key-counts:write-board'),
+    readFile: invoke('navi:key-counts:read-file'),
+  },
   onConfigChanged: (cb) => subscribe('navi:config-changed', cb),
   setTitleBarColors: invoke('navi:titlebar'),
   setZoom: invoke('navi:set-zoom'),

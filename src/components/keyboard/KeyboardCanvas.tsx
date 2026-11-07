@@ -25,6 +25,8 @@ export interface KeyView {
   highlighted?: boolean;
   dim?: boolean;
   approx?: boolean;
+  /** Heatmap: the key filled by its count (fill null = never pressed, outline only); `ink` is the label color, `title` goes first in the tooltip. */
+  heat?: { fill: string | null; ink: string; title: string };
 }
 
 export interface EncoderView {
@@ -362,6 +364,7 @@ function KeyCap({
     view.highlighted && 'is-highlighted',
     view.dim && 'is-dim',
     view.approx && 'is-approx',
+    view.heat && (view.heat.fill ? 'is-heat' : 'is-heat is-heat-cold'),
     dragSource && 'is-drag-source',
     dropTarget && 'is-drop-target',
     !k.matrix && 'is-unwired',
@@ -375,7 +378,7 @@ function KeyCap({
   const main = fitLabel(mainText, room, capSizes(mainText, S), label.top && hasHold ? 1 : 2);
   const lineGap = main.size * 1.15;
   return (
-    <g className={cls} transform={k.r ? `rotate(${k.r} ${rx} ${ry})` : undefined} onDoubleClick={onDoubleClick} data-key={k.id}>
+    <g className={cls} transform={k.r ? `rotate(${k.r} ${rx} ${ry})` : undefined} onDoubleClick={onDoubleClick} data-key={k.id} style={view.heat?.fill ? ({ '--heat-fill': view.heat.fill, '--heat-ink': view.heat.ink } as React.CSSProperties) : undefined}>
       <title>{keyTooltip(view, k)}</title>
       {k.shape === 'circle' ? (
         <ellipse className="kb-key-shape" cx={cx} cy={y + h / 2} rx={w / 2 - gap} ry={h / 2 - gap} />
@@ -482,7 +485,8 @@ function keyTooltip(view: KeyView, k: KeyGeom): string {
   const desc = label.description && label.description !== label.qmk && label.description !== head ? label.description : '';
   const what = [head, desc].filter(Boolean).join(' — ');
   const code = `${label.qmk}${k.matrix ? `  [${k.matrix[0]},${k.matrix[1]}]` : ''}`;
-  return what ? `${what}\n${code}` : code;
+  const base = what ? `${what}\n${code}` : code;
+  return view.heat ? `${view.heat.title}\n${base}` : base;
 }
 
 function dirText(name: string | undefined, label: KeyLabel | null | undefined): string {

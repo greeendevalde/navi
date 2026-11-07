@@ -11,6 +11,7 @@ import {
   type EncoderAction,
   type Geometry,
   type HardwareProfile,
+  type KeyCountsSettings,
   type Keymap,
   type Layer,
   type Project,
@@ -25,6 +26,9 @@ export const LIFT_HELD_MODS_DEFAULT = true;
 /** New projects: NAVI may not restart the keyboard into its bootloader (firmware.bootloaderReboot). */
 export const BOOTLOADER_REBOOT_DEFAULT = false;
 
+/** The secrets header's name in new projects and older files (firmware.secretsHeader). */
+export const SECRETS_HEADER_DEFAULT = 'secrets.h';
+
 /** New projects: no firmware tests file (firmware.tests). */
 export const FIRMWARE_TESTS_DEFAULT = false;
 
@@ -34,6 +38,10 @@ export const AUTO_REPEAT_LIMITS = { delay: { min: 1, max: 10000 }, rate: { min: 
 
 /** New projects and older files: the text route (firmware.textRoute), QMK's recommended Windows Unicode input. */
 export const TEXT_ROUTE_DEFAULT = 'wincompose' as const;
+
+/** New projects and older files: no key counting (firmware.keyCounts); the board route saves every 30 minutes. */
+export const KEY_COUNTS_DEFAULT: KeyCountsSettings = { route: 'off', saveMinutes: 30, programFile: '' };
+export const KEY_COUNTS_SAVE_LIMITS = { min: 1, max: 1440 };
 
 export const KC_NO = 0x0000;
 export const KC_TRNS = 0x0001;
@@ -121,9 +129,13 @@ export function createProject({ name, hardware, geometry, layers = 4, encoderCou
       buildConfig: {},
       layerKeysOnTop: LAYER_KEYS_ON_TOP_DEFAULT,
       liftHeldMods: LIFT_HELD_MODS_DEFAULT,
+      oneShotCancel: false,
       bootloaderReboot: BOOTLOADER_REBOOT_DEFAULT,
       tests: FIRMWARE_TESTS_DEFAULT,
       runTests: false,
+      secretsHeader: SECRETS_HEADER_DEFAULT,
+      indicatorLeds: [],
+      keyCounts: { ...KEY_COUNTS_DEFAULT },
       autoRepeat: { ...AUTO_REPEAT_DEFAULT },
       textRoute: TEXT_ROUTE_DEFAULT,
     },

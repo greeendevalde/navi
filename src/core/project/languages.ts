@@ -120,6 +120,12 @@ export function removeLanguage(spec: KeycodeSpec, project: Project, id: string):
       const { holdOnByLanguage: _, ...other } = s;
       return rest.length ? { ...other, holdOnByLanguage: rest } : other;
     }),
+    // Its per-language actions go too: those keys play the "other languages" action there now.
+    customKeycodes: renumbered.customKeycodes.map((c) =>
+      c.action.type === 'by-language' && c.action.byLanguage.some((e) => e.language === id)
+        ? { ...c, action: { ...c.action, byLanguage: c.action.byLanguage.filter((e) => e.language !== id) } }
+        : c,
+    ),
   };
 }
 

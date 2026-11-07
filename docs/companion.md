@@ -49,6 +49,7 @@ byte).
 | `0x02` TYPE | keyboard → PC | a piece of text in `send_string` format, NUL-terminated (at most 29 bytes) | type this, in order |
 | `0x03` LANGUAGE | keyboard → PC | language index | switch the OS layout to it |
 | `0x04` OS_LANGUAGE | PC → keyboard | language index | the OS switched; the keyboard follows (`navi_set_language`, nothing sent back) |
+| `0x4B` `'K'` KEY COUNTS | both | `'I'` INFO or `'R'` READ, see below | built: the board route of “count key presses” |
 
 TYPE's text format is the one in `docs/languages.md`: UTF-8 plus `0x01 0x01|02|03 <kc>` for key tap / down / up.
 A piece never ends inside a UTF-8 character or a `0x01` sequence. The firmware already cuts text this way for VIA
@@ -106,6 +107,17 @@ These rules come from a private program that does the same job for one keyboard 
 
 Limits to state in the help text: `SendInput` can't type into a window running as administrator when the
 companion isn't (Windows' UIPI), and some games read raw input and ignore injected text.
+
+## Key counts (built, shares the byte)
+
+“Count key presses” (Firmware → flash, for the heatmap) already uses `0x4E`, command `0x4B` `'K'`, and the same
+`raw_hid_receive` / `via_command_kb` / `navi_raw_hid_receive` owners as the reboot packet: the generated hook tries
+each NAVI handler in turn, so the companion's handler is one more entry there (`rawHidHookC` in
+`src/core/qmk/bootloaderReboot.ts`). On the board route NAVI's own window reads the counts (`'I'` INFO: protocol,
+table hash, count of counters; `'R'` READ `offset`: up to 13 counts, zeroed on the board as they are read); the
+companion must ignore `0x4E 0x4B` replies it didn't ask for. The program route needs no packet: the firmware calls
+`navi_key_count_user()` and a program of the user's own sends the counts wherever it likes (`docs/key-counts.md`);
+a companion could take that job later and write the counts file itself.
 
 ## Tools (to confirm in a spike)
 

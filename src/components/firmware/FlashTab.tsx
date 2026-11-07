@@ -19,6 +19,7 @@ import { BootloaderHelp } from '../device/BootloaderHelp';
 import { BuildLog } from './BuildLog';
 import { BootloaderRebootRow } from './BootloaderRebootRow';
 import { FirmwareTestsRow } from './FirmwareTestsRow';
+import { KeyCountsRow } from './KeyCountsRow';
 import { QMK_DOCS } from '../../lib/qmkDocs';
 import { acceptNoBackup, expectedUsb, hasBoardBackup, noBackupAccepted, waitForKeyboardBack } from '../../lib/flashSteps';
 import { whyDisabled } from '../../lib/whyDisabled';
@@ -222,6 +223,7 @@ export function FlashTab({ active = true }: { active?: boolean }) {
           <div className="panel-box-body">
             <BootloaderRebootRow project={project} />
             <FirmwareTestsRow project={project} />
+            <KeyCountsRow project={project} />
           </div>
         </div>
       )}

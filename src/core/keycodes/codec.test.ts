@@ -181,7 +181,10 @@ describe('labels and sequences', async () => {
     expect(parseKeySequence(spec, 'g h')).toEqual({ keys: [0x0a, 0x0b] });
     expect(parseKeySequence(spec, 'F1 1 ; KC_ENT')).toEqual({ keys: [0x3a, 0x1e, 0x33, 0x28] });
     expect('error' in parseKeySequence(spec, 'ы')).toBe(true);
-    expect('error' in parseKeySequence(spec, 'LCTL_T(KC_A)')).toBe(true);
+    expect(parseKeySequence(spec, 'LCTL_T(KC_A) MO(1) LM(1,MOD_LCTL) C(KC_B)')).toEqual({ keys: [0x04, 0x5221, 0x5021, 0x0105] }); // a tap-hold key: its tap key, as QMK's leader records it
+    expect('error' in parseKeySequence(spec, 'QK_REPEAT_KEY')).toBe(true); // the repeat key runs before process_record_user
+    expect('error' in parseKeySequence(spec, 'KC_NO')).toBe(true);
+    expect(sequenceText(spec, [0x5221, 0x5021])).toBe('MO(1) LM(1,MOD_LCTL)');
     expect('error' in parseKeySequence(spec, 'a b c d e f')).toBe(true);
     expect(sequenceText(spec, [0x0a, 0x0b, 0x33, 0x3a])).toBe('g h ; KC_F1');
   });
