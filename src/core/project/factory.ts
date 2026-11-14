@@ -36,6 +36,9 @@ export const FIRMWARE_TESTS_DEFAULT = false;
 export const AUTO_REPEAT_DEFAULT = { delay: 500, rate: 33 }; // Windows defaults (delay 1, speed 31): measured 500 ms, 33 ms
 export const AUTO_REPEAT_LIMITS = { delay: { min: 1, max: 10000 }, rate: { min: 1, max: 1000 } };
 
+/** New projects and older files: tap-hold taps as QMK sends them (firmware.tapHoldTapMs 0 = off); the limits. */
+export const TAP_HOLD_TAP_MS_LIMITS = { min: 0, max: 500 };
+
 /** New projects and older files: the text route (firmware.textRoute), QMK's recommended Windows Unicode input. */
 export const TEXT_ROUTE_DEFAULT = 'wincompose' as const;
 
@@ -137,6 +140,7 @@ export function createProject({ name, hardware, geometry, layers = 4, encoderCou
       indicatorLeds: [],
       keyCounts: { ...KEY_COUNTS_DEFAULT },
       autoRepeat: { ...AUTO_REPEAT_DEFAULT },
+      tapHoldTapMs: 0,
       textRoute: TEXT_ROUTE_DEFAULT,
     },
     device: null,

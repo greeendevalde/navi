@@ -30,10 +30,12 @@ import { LayerKeysOnTopRow } from '../components/advanced/LayerKeysOnTop';
 import { HeldModsSelect, LiftHeldModsRow } from '../components/advanced/HeldModsControls';
 import { OneShotCancelRow } from '../components/advanced/OneShotCancel';
 import { AutoRepeatRows } from '../components/advanced/AutoRepeat';
+import { TapLengthRow } from '../components/advanced/TapLength';
 import { CapsWordRules } from '../components/advanced/CapsWordRules';
+import { QmkParamRow } from '../components/QmkParamRow';
 import { ModsInput } from '../components/keyboard/KeycodeComposer';
 import { getLanguage, t } from '../i18n';
-import { openDocs, QMK_DOCS } from '../lib/qmkDocs';
+import { QMK_DOCS } from '../lib/qmkDocs';
 import { deletedToast } from '../lib/undoToast';
 import { whyDisabled } from '../lib/whyDisabled';
 import { EmptyState } from '../components/EmptyState';
@@ -411,6 +413,14 @@ function NaviBehaviorTab({ project }: { project: Project }) {
       </section>
       <section className="section">
         <div className="section-head">
+          <h2>{t('Tap-hold keys', 'Тап-холд клавиши')}</h2>
+        </div>
+        <div className="panel-box rows">
+          <TapLengthRow project={project} />
+        </div>
+      </section>
+      <section className="section">
+        <div className="section-head">
           <h2>{t('One-shot keys', 'One-shot клавиши')}</h2>
         </div>
         <div className="panel-box rows">
@@ -444,7 +454,6 @@ function NaviBehaviorTab({ project }: { project: Project }) {
 }
 
 function BehaviorTab({ project }: { project: Project }) {
-  const apply = useProjectStore((s) => s.apply);
   const params = useMemo(() => configParams(), []);
   const lang = getLanguage();
   const groups = useMemo(() => {
@@ -460,17 +469,6 @@ function BehaviorTab({ project }: { project: Project }) {
     })
     .filter(([, list]) => list.length > 0);
   const shownCount = shownGroups.reduce((n, [, list]) => n + list.length, 0);
-  const setValue = (define: string, value: string | number | boolean | undefined) =>
-    apply(
-      (p) => {
-        const buildConfig = { ...p.firmware.buildConfig };
-        if (value === undefined || value === '') delete buildConfig[define];
-        else buildConfig[define] = value;
-        return { ...p, firmware: { ...p.firmware, buildConfig } };
-      },
-      `config.h ${define}`,
-      { coalesce: `cfg:${define}` },
-    );
   return (
     <div className="page">
       <p className="field-hint">
@@ -494,48 +492,9 @@ function BehaviorTab({ project }: { project: Project }) {
             <h2>{lang === 'ru' ? groupTitle(group).ru : groupTitle(group).en}</h2>
           </div>
           <div className="panel-box rows">
-            {list.map((p) => {
-              const v = project.firmware.buildConfig[p.define];
-              return (
-                <div key={p.define} {...findAttr('cfg:' + p.define)} className="row" style={{ ['--row-cols' as string]: 'minmax(0,1.3fr) minmax(0,1fr) auto' }}>
-                  <span>
-                    {lang === 'ru' ? p.title.ru : p.title.en}
-                    {p.hint && <span className="field-hint"> — {lang === 'ru' ? p.hint.ru : p.hint.en}</span>}
-                    {p.docs && (
-                      <span className="row-docs">
-                        <button type="button" className="text-btn" onClick={() => openDocs(p.docs!)}>
-                          {t('QMK docs', 'Документация QMK')} ↗
-                        </button>
-                      </span>
-                    )}
-                  </span>
-                  <code className="kicker">{p.define}</code>
-                  {p.type === 'int' ? (
-                    <input
-                      className="input input--num"
-                      type="number"
-                      min={p.min}
-                      max={p.max}
-                      placeholder={p.qmkDefault !== undefined ? String(p.qmkDefault) : '—'}
-                      value={typeof v === 'number' ? v : ''}
-                      onChange={(e) => setValue(p.define, e.target.value === '' ? undefined : Number(e.target.value))}
-                      aria-label={p.define}
-                    />
-                  ) : (
-                    <select
-                      className="select"
-                      value={v === true ? 'on' : v === false ? 'off' : ''}
-                      onChange={(e) => setValue(p.define, e.target.value === '' ? undefined : e.target.value === 'on')}
-                      aria-label={p.define}
-                    >
-                      <option value="">{t('default', 'по умолч.')}</option>
-                      <option value="on">{t('on', 'вкл')}</option>
-                      <option value="off">{t('off', 'выкл')}</option>
-                    </select>
-                  )}
-                </div>
-              );
-            })}
+            {list.map((p) => (
+              <QmkParamRow key={p.define} project={project} param={p} />
+            ))}
           </div>
         </section>
       ))}

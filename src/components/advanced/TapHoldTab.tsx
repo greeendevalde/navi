@@ -37,6 +37,7 @@ import { IssueList, KeyChips, type KeyChip } from './common';
 import { HoldSpots } from './HoldSpots';
 import { changesOfItem } from '../../core/qmk/behaviorChanges';
 import { BehaviorChangesHere } from '../firmware/BehaviorChanges';
+import { FeatureSettings, flavorTitle } from '../KeySettings';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 // The number columns match .input--num (76px); the keys wrap their chips. Hold keys get their own line under the row.
@@ -44,14 +45,6 @@ const COLS = 'minmax(0,1fr) 150px 100px 132px 72px 32px 32px';
 const LIST_COLS = '180px minmax(0,1fr) 72px 32px';
 type Flavor = NonNullable<TapHoldSetting['flavor']>;
 
-const flavorTitle = (f: Flavor | '') =>
-  f === 'tap-preferred'
-    ? t('Tap preferred', 'Приоритет нажатия')
-    : f === 'balanced'
-      ? t('Balanced', 'Сбалансированный')
-      : f === 'hold-preferred'
-        ? t('Hold preferred', 'Приоритет удержания')
-        : t('Default (global)', 'По умолчанию (общий)');
 
 const sameSet = (a: number[], b: number[]) => a.length === b.length && a.every((k) => b.includes(k)) && b.every((k) => a.includes(k));
 
@@ -162,8 +155,8 @@ export function TapHoldTab({ project }: { project: Project }) {
     <div className="page">
       <p className="field-hint">
         {t(
-          'A tap-hold key does one thing when tapped and another when held: a mod-tap (LSFT_T(KC_F): F, held Shift) or a layer-tap (LT(1, KC_SPC): Space, held layer 1). Settings here change how one keycode tells a tap from a hold; every key with that keycode shares them. An empty field uses the global value from QMK settings (config.h).',
-          'Клавиша тап-холд делает одно при нажатии и другое при удержании: mod-tap (LSFT_T(KC_F): F, удержание — Shift) или layer-tap (LT(1, KC_SPC): пробел, удержание — слой 1). Настройки здесь меняют, как один keycode отличает нажатие от удержания; их делят все клавиши с этим keycode. Пустое поле — общее значение из «Настройки QMK» (config.h).',
+          'A tap-hold key does one thing when tapped and another when held: a mod-tap (LSFT_T(KC_F): F, held Shift) or a layer-tap (LT(1, KC_SPC): Space, held layer 1). Settings here change how one keycode tells a tap from a hold; every key with that keycode shares them. An empty field uses the global value in the settings below.',
+          'Клавиша тап-холд делает одно при нажатии и другое при удержании: mod-tap (LSFT_T(KC_F): F, удержание — Shift) или layer-tap (LT(1, KC_SPC): пробел, удержание — слой 1). Настройки здесь меняют, как один keycode отличает нажатие от удержания; их делят все клавиши с этим keycode. Пустое поле — общее значение из настроек ниже.',
         )}{' '}
         <InfoTip docs={QMK_DOCS.tapHold} label={t('tap-hold', 'тап-холд')}>
           {t(
@@ -172,6 +165,7 @@ export function TapHoldTab({ project }: { project: Project }) {
           )}
         </InfoTip>
       </p>
+      <FeatureSettings project={project} feature="taphold" />
 
       {project.keyLists.length + project.tapHolds.length > 0 && (
         <ListFilter

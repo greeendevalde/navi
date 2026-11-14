@@ -23,6 +23,7 @@ import { BOOTLOADER_HELPER_C, rawHidHookC, rawHidPipelineHookC } from './bootloa
 import { boardFitIssues, comboCountEventCode, KEY_COUNTS_LINES, KEY_COUNTS_RECORD_LINE, keyCountsCode, keyCountsConfig, keyCountsDecl, keyCountsPlan, keyCountsRecordCode, keyCountsSuspendCode, USER_EEPROM_RE, type KeyCountsLayout } from './keyCounts';
 import { LIFT_HELPERS_C, LIFT_SYMBOLS, liftedBlock, liftedLine, liftOf, liftSetting } from './heldMods';
 import { oneShotCancelActive, oneShotCancelIssues, oneShotCancelLines, oneShotCancelState } from './oneShotCancel';
+import { tapLengthActive, tapLengthLines, tapLengthState } from './tapLength';
 import { layerOnTopCallback, layerOnTopState, layerOnTopStubs } from './layerOnTop';
 import { languageDecl, languageEarlyCode, languageKeyName, languagePrototypes, languageRecordLines, languageSwitchCode, languageSymbolCode, languageViaMacroLines, LANGUAGE_SYMBOLS, planLanguages, routedMacroStatements, ROUTE_UNICODE_MODE } from './languages';
 import { checkLanguages, languageCName } from '../project/languages';
@@ -762,6 +763,8 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
   if (switcher) c.push(...taskSwitcherCode({ layersOnTop }));
   const osCancel = oneShotCancelActive(project);
   if (osCancel) c.push(...oneShotCancelState());
+  const tapLength = tapLengthActive(spec, project);
+  if (tapLength) c.push(...tapLengthState(project.firmware.tapHoldTapMs));
   // Indicator LEDs: worked out on every housekeeping pass; toggle keys seen in process_record.
   const ledsOn = writtenLeds(project.firmware.indicatorLeds).length > 0;
   if (ledsOn) c.push(...indicatorLedCode({ leds: project.firmware.indicatorLeds, layersOn: layersOnTop || pipeline ? 'navi_layers_on()' : 'layer_state' }));
@@ -772,7 +775,7 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
   // Key overrides on keys NAVI's code (or Caps Word) takes first: process_key_override sees them before (keyOverridesFirst.ts).
   const koFirst = keyOverridesFirstTriggers(spec, project, !!lang?.symbols);
   if (koFirst.length) c.push(...keyOverridesFirstCode(koFirst.map(kc)));
-  const otherRecord = koFirst.length > 0 || keysHandled || layersOnTop || tapHoldInCode || tdC.keys || !!lang || viaLift || osCancel || ledRecord.length > 0 || switcher;
+  const otherRecord = koFirst.length > 0 || keysHandled || layersOnTop || tapHoldInCode || tdC.keys || !!lang || viaLift || osCancel || tapLength || ledRecord.length > 0 || switcher;
   // The hand-over to the leader: with any other record code (it may take a sequence key), or for a sequence key that
   // isn't a plain key (Caps Word, tap dance, a key override… take those before process_leader).
   const leaderPass = leaders.length > 0 && (otherRecord || leaders.some((s) => s.keys.some((k) => k > 0xff)));
@@ -783,6 +786,7 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
   }
   if (recordHook) {
     c.push(`bool ${hookName('process_record_user')}(uint16_t keycode, keyrecord_t *record) {`);
+    if (tapLength) c.push(...tapLengthLines()); // first: nothing else may send the tap's release before the wait
     if (counts) c.push(KEY_COUNTS_RECORD_LINE);
     if (leaderPass) c.push(...leaderPassLines(leaders, kc));
     c.push(...ledRecord);

@@ -59,7 +59,10 @@ class NaviHost : public TestFixture {
                 for (uint8_t col = 0; col < MATRIX_COLS; col++) add_key(KeymapKey(layer, col, row, keycode_at_keymap_location_raw(layer, row, col)));
         ON_CALL(driver, send_keyboard_mock(_)).WillByDefault(Invoke([this](report_keyboard_t &r) {
             std::string t = report_text(r);
-            if (reports.empty() || reports.back() != t) reports.push_back(t);
+            if (reports.empty() || reports.back() != t) {
+                reports.push_back(t);
+                report_times.push_back(timer_read32());
+            }
         }));
     }
 
@@ -107,4 +110,5 @@ class NaviHost : public TestFixture {
 
     testing::NiceMock<TestDriver> driver;
     std::vector<std::string>      reports;
+    std::vector<uint32_t>         report_times; // the clock at each of reports
 };

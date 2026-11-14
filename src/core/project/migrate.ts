@@ -118,6 +118,12 @@ export const MIGRATIONS: Record<number, (d: Data) => Data> = {
     if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 23 }; // validate reports it
     return { ...d, schemaVersion: 23, firmware: { ...(f as Data), keyCounts: { ...KEY_COUNTS_DEFAULT } } };
   },
+  // 23 → 24: how long a tap-hold key's tap stays down (firmware.tapHoldTapMs), 0 (off) for older files.
+  23: (d) => {
+    const f = d.firmware;
+    if (!f || typeof f !== 'object' || Array.isArray(f)) return { ...d, schemaVersion: 24 }; // validate reports it
+    return { ...d, schemaVersion: 24, firmware: { ...(f as Data), tapHoldTapMs: 0 } };
+  },
 };
 
 export function migrateProject(input: Data): { data: Data; from: number } | { error: string } {

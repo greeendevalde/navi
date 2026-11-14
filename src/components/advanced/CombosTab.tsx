@@ -26,6 +26,7 @@ import { findAttr, useFindJump, useListFilter } from '../../lib/find';
 import { QMK_DOCS } from '../../lib/qmkDocs';
 import { deletedToast } from '../../lib/undoToast';
 import { whyDisabled } from '../../lib/whyDisabled';
+import { FeatureSettings } from '../KeySettings';
 
 const ICON = { size: 14, strokeWidth: 1.5 };
 
@@ -221,6 +222,7 @@ export function CombosTab({ project, active: tabActive = true }: { project: Proj
           )}
         </InfoTip>
       </p>
+      <FeatureSettings project={project} feature="combos" />
 
       <div className="combo-top">
         <div className={`panel-box combo-board ${pick ? 'is-picking' : ''}`}>
@@ -435,8 +437,8 @@ function ComboEditor({
           <Hint
             docs={QMK_DOCS.comboPerCombo}
             tip={t(
-              'How long all the keys of this combo may take to go down together. Empty: the global COMBO_TERM (50 ms in QMK). A longer window catches slow chords but can fire by accident while typing.',
-              'За сколько все клавиши этого комбо должны быть нажаты. Пусто — общее COMBO_TERM (в QMK 50 мс). Больше окно — ловит медленные нажатия, но может срабатывать случайно при наборе.',
+              'How long all the keys of this combo may take to go down together. Empty: the combo term in the settings at the top of this tab. A longer window catches slow chords but can fire by accident while typing.',
+              'За сколько все клавиши этого комбо должны быть нажаты. Пусто — общее окно из настроек вверху вкладки. Больше окно — ловит медленные нажатия, но может срабатывать случайно при наборе.',
             )}
           >
             {t('own term, ms', 'своё окно, мс')}

@@ -52,6 +52,14 @@ export const PROJECT_SETTING_ITEMS: readonly SettingItem[] = [
     route: { section: 'advanced', tab: 'navi' },
   },
   {
+    key: 'firmware.tapHoldTapMs',
+    label: () => t('Tap length of tap-hold keys', 'Длительность нажатия тап-холд клавиш'),
+    hint: () => t('How long the tap of a mod-tap or layer-tap key stays pressed', 'Сколько держится нажатие mod-tap или layer-tap клавиши при тапе'),
+    keywords: 'tap hold mod-tap layer-tap hold duration press length delay missed TAP_CODE_DELAY тап холд длительность удержание задержка',
+    section: () => `${t('Advanced', 'Дополнительно')} › ${t('NAVI additions', 'Дополнения NAVI')}`,
+    route: { section: 'advanced', tab: 'navi' },
+  },
+  {
     key: 'firmware.oneShotCancel',
     label: () => t('A second tap cancels a one-shot modifier', 'Второе нажатие отменяет one-shot модификатор'),
     hint: () => t('Tap a one-shot Shift (OSM) twice and the Shift is gone', 'Нажмите one-shot Shift (OSM) дважды — Shift отпускается'),

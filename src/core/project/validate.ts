@@ -13,7 +13,7 @@ import { CAPS_WORD_KEYS_MAX, CAPS_WORD_RULES_MAX } from './capsWord';
 import { INDICATOR_LEDS_MAX, INDICATOR_STATES } from './indicatorLeds';
 import { HOLD_ON_KEYS_MAX, HOLD_ON_SPOTS_MAX, KEY_LIST_KEYS_MAX, KEY_LIST_NAME_MAX, KEY_LISTS_MAX, TAP_HOLD_FLAVORS, TAP_HOLD_KEYCODES_MAX, TAP_HOLD_MAX, TAP_HOLD_TERM_MAX, TAP_HOLD_TERM_MIN } from './tapHolds';
 import { TAP_HOLD_ACTIONS_MAX } from './tapHoldActions';
-import { AUTO_REPEAT_DEFAULT, AUTO_REPEAT_LIMITS, KEY_COUNTS_DEFAULT, KEY_COUNTS_SAVE_LIMITS, SECRETS_HEADER_DEFAULT, TEXT_ROUTE_DEFAULT } from './factory';
+import { AUTO_REPEAT_DEFAULT, AUTO_REPEAT_LIMITS, KEY_COUNTS_DEFAULT, KEY_COUNTS_SAVE_LIMITS, SECRETS_HEADER_DEFAULT, TAP_HOLD_TAP_MS_LIMITS, TEXT_ROUTE_DEFAULT } from './factory';
 import { validSecretsHeader } from '../qmk/secretText';
 import { LANGUAGE_CODE_RE, LANGUAGE_NAME_MAX, LANGUAGES_MAX } from './languages';
 import { migrateProject } from './migrate';
@@ -669,6 +669,7 @@ function readFirmware(r: Reader, v: unknown): FirmwareConfig {
       delay: r.num(ar.delay, 'firmware.autoRepeat.delay', AUTO_REPEAT_LIMITS.delay.min, AUTO_REPEAT_LIMITS.delay.max, AUTO_REPEAT_DEFAULT.delay),
       rate: r.num(ar.rate, 'firmware.autoRepeat.rate', AUTO_REPEAT_LIMITS.rate.min, AUTO_REPEAT_LIMITS.rate.max, AUTO_REPEAT_DEFAULT.rate),
     },
+    tapHoldTapMs: r.num(o.tapHoldTapMs ?? 0, 'firmware.tapHoldTapMs', TAP_HOLD_TAP_MS_LIMITS.min, TAP_HOLD_TAP_MS_LIMITS.max, 0),
     textRoute: r.oneOf(o.textRoute, 'firmware.textRoute', TEXT_ROUTES, TEXT_ROUTE_DEFAULT),
     keyboard: keyboard || null,
     keymap,

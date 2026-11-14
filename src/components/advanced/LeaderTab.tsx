@@ -1,6 +1,6 @@
 /**
  * Leader key: press QK_LEAD, then 1–5 keys → action.
- * The generator writes leader_end_user() into keymap.c; the wait time is LEADER_TIMEOUT (“Behavior”).
+ * The generator writes leader_end_user() into keymap.c; the wait time is LEADER_TIMEOUT, in the settings block at the top.
  */
 import { useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
@@ -12,7 +12,6 @@ import { activeKeymap, customKeycodeValue } from '../../core/project/ops';
 import { parseContext } from '../../lib/projectContext';
 import { newId } from '../../core/layout/geometry';
 import type { LeaderSequence, Project } from '../../core/project/types';
-import { href } from '../../lib/router';
 import { useProjectStore, useSpec } from '../../store/projectStore';
 import { ActionEditor, FeatureNote, IssueList } from './common';
 import { getLanguage, t } from '../../i18n';
@@ -22,6 +21,7 @@ import { whyDisabled } from '../../lib/whyDisabled';
 import { EmptyState } from '../EmptyState';
 import { Hint, InfoTip } from '../InfoTip';
 import { ListFilter } from '../ListFilter';
+import { FeatureSettings } from '../KeySettings';
 import { findAttr, matchesQuery, useListFilter } from '../../lib/find';
 import { useKeyWords } from '../../lib/keyFind';
 
@@ -105,10 +105,9 @@ export function LeaderTab({ project }: { project: Project }) {
       <FeatureNote project={project} feature="leader" firstUse={{ en: 'add the first sequence', ru: 'добавите первую последовательность' }} />
       <p className="field-hint">
         {t(
-          'Press the Leader key (QK_LEAD), then type a short sequence — e.g. Leader, d, d → type your e-mail. Type the keys separated by spaces: “d d”, “g h”, “f1 x”. Plain keys are as printed (US layout); any other keycode the leader sees works too: an own keycode, a layer key, a tap dance (“MY_Y”, “MO(1)”, “TD(0)”). The wait time is LEADER_TIMEOUT in ',
-          'Нажмите клавишу-лидер (QK_LEAD), затем короткую последовательность — например, лидер, d, d → набрать e-mail. Клавиши — через пробел: «d d», «g h», «f1 x». Простые — как на клавише (раскладка US); подойдёт и любой другой keycode, который видит лидер: свой keycode, клавиша слоя, tap dance («MY_Y», «MO(1)», «TD(0)»). Время ожидания — LEADER_TIMEOUT в ',
-        )}
-        <a href={href({ section: 'advanced', tab: 'behavior' })}>{t('QMK settings', '«Настройках QMK»')}</a>.{' '}
+          'Press the Leader key (QK_LEAD), then type a short sequence — e.g. Leader, d, d → type your e-mail. Type the keys separated by spaces: “d d”, “g h”, “f1 x”. Plain keys are as printed (US layout); any other keycode the leader sees works too: an own keycode, a layer key, a tap dance (“MY_Y”, “MO(1)”, “TD(0)”). How long it waits is in the settings below.',
+          'Нажмите клавишу-лидер (QK_LEAD), затем короткую последовательность — например, лидер, d, d → набрать e-mail. Клавиши — через пробел: «d d», «g h», «f1 x». Простые — как на клавише (раскладка US); подойдёт и любой другой keycode, который видит лидер: свой keycode, клавиша слоя, tap dance («MY_Y», «MO(1)», «TD(0)»). Время ожидания — в настройках ниже.',
+        )}{' '}
         <InfoTip docs={featureDocs('leader') ?? QMK_DOCS.leaderUsage} label={t('Leader key', 'Клавиша-лидер')}>
           {t(
             'After QK_LEAD you type up to 5 keys. The sequence ends after a pause longer than the timeout (LEADER_TIMEOUT); if the keys match a sequence below, its action runs.',
@@ -116,6 +115,7 @@ export function LeaderTab({ project }: { project: Project }) {
           )}
         </InfoTip>
       </p>
+      <FeatureSettings project={project} feature="leader" />
       {project.leaderSequences.length === 0 && (
         <EmptyState
           what={t(

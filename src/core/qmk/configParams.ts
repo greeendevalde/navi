@@ -343,8 +343,8 @@ const DOCS: Record<string, { title: Text; hint?: Text; docs?: string; qmkDefault
   TAP_CODE_DELAY: {
     title: { en: 'Delay inside taps, ms', ru: 'Задержка внутри нажатия, мс' },
     hint: {
-      en: 'Pause between pressing and releasing a key when the firmware taps it itself (macros, tap_code). Raise it if some taps are missed, common on V-USB boards.',
-      ru: 'Пауза между нажатием и отпусканием, когда прошивка сама «нажимает» клавишу (макросы, tap_code). Увеличьте, если часть нажатий теряется; так бывает на платах с V-USB.',
+      en: 'Pause between pressing and releasing a key whenever the firmware taps one itself: macros, tap dances, typed text, tap_code and the taps of mod-tap / layer-tap keys. It slows all of them; to hold only tap-hold taps longer, use “Tap length of tap-hold keys” in NAVI additions. Raise it if some taps are missed, common on V-USB boards.',
+      ru: 'Пауза между нажатием и отпусканием всякий раз, когда прошивка сама «нажимает» клавишу: макросы, тап-дэнсы, печатаемый текст, tap_code и тапы mod-tap / layer-tap клавиш. Замедляет их все; чтобы дольше держать только тапы тап-холд клавиш, используйте «Длительность нажатия тап-холд клавиш» в «Дополнениях NAVI». Увеличьте, если часть нажатий теряется; так бывает на платах с V-USB.',
     },
     docs: 'https://docs.qmk.fm/config_options',
     qmkDefault: 0,

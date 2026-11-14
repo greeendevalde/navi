@@ -20,6 +20,7 @@ import { useSpec } from '../../store/projectStore';
 import { getLanguage, t, count } from '../../i18n';
 import { KeycodeComposer } from '../keyboard/KeycodeComposer';
 import { KeyName } from '../KeyName';
+import { KeySettings } from '../KeySettings';
 import { LayerRoutes, useLayerRefs } from '../layers/LayerRoutes';
 import { toast } from '../../store/toastStore';
 import { whyDisabled } from '../../lib/whyDisabled';
@@ -134,6 +135,14 @@ export function KeyInspector() {
           {t('A catalog tile or an expression will be assigned to all of them on the current layer.', 'Плитка каталога или выражение назначится всем сразу на текущем слое.')}
         </p>
         {actions}
+        <KeySettings
+          project={project}
+          keys={selectedKeys.flatMap((k) => {
+            if (!k.matrix) return [];
+            const v = getKeycode(project, keymap, layer, k.matrix);
+            return [{ keycode: v === 1 ? effectiveKeycode(project, keymap, k.matrix, [layer]).keycode : v, pos: k.matrix, layer }];
+          })}
+        />
       </div>
     );
   }
@@ -202,6 +211,8 @@ export function KeyInspector() {
           )}
         </div>
       )}
+      {/* A transparent key does what the layer below gives it, so those settings act on it. */}
+      <KeySettings project={project} keys={[{ keycode: value === 1 ? eff.keycode : value, pos: key.matrix, layer }]} />
       {actions}
       <KeycodeComposer spec={spec} project={project} value={value} onChange={(v) => assignToSelection(v)} onTapHold={(tap, hold) => assignTapHoldToSelection(tap, hold)} />
       <div className="field">

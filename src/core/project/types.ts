@@ -12,7 +12,7 @@
 import type { Evidence, FeatureId, FlagInfo } from '../features/registry';
 
 export const PROJECT_FORMAT = 'navi.project';
-export const PROJECT_SCHEMA_VERSION = 23;
+export const PROJECT_SCHEMA_VERSION = 24;
 
 /** [row, column] in the firmware matrix. */
 export type MatrixPos = [number, number];
@@ -518,6 +518,11 @@ export interface FirmwareConfig {
    * repeats. NAVI's own C code in keymap.c, not a define.
    */
   autoRepeat: { delay: number; rate: number };
+  /**
+   * How long a tap-hold key's tap (MT / LT, NAVI's stand-ins too) stays down, ms (since format 24); 0 = off, QMK sends
+   * the tap's press and release in one scan. NAVI's own C code at the top of process_record (core/qmk/tapLength.ts).
+   */
+  tapHoldTapMs: number;
   /** How text is typed outside a plain-keys language (since format 13; used only with such a language). */
   textRoute: TextRoute;
   /**

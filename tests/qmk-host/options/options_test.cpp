@@ -1,4 +1,4 @@
-// Hold spots and the one-shot cancel (fixture.test.ts → optionsHostProject). Positions (n = row * 10 + col):
+// Hold spots, the one-shot cancel and the tap-hold tap length, 30 ms (fixture.test.ts → optionsHostProject). Positions (n = row * 10 + col):
 //   0 LT(1, KC_SPC)   1 LGUI_T(KC_Q): holds when a key at 5, 13 or 39 is pressed   2 KC_C   3 MO(1)
 //   4 OSM(MOD_LSFT), a second tap cancels it   5 KC_E (layer 1: KC_A)   6 KC_X (layer 1: the task switcher key)   13 KC_N   39 KC_S
 #include "../navi_host.hpp"
@@ -67,4 +67,16 @@ TEST_F(NaviHost, task_switcher_pick_waits_for_the_switcher_to_open) {
 // A key pressed while the pick waits: Enter goes first, so the key reaches the picked window
 TEST_F(NaviHost, task_switcher_pick_goes_before_a_key_pressed_while_it_waits) {
     EXPECT_EQ(play({"+3", "+6", "-6", "-3", "+5", "-5"}), "LCTL+LALT LCTL+LALT+0x2B LCTL+LALT - 0x28 - E -");
+}
+
+// A tap-hold key's tap stays down 30 ms (firmware.tapHoldTapMs): QMK alone sends its release in the same scan
+TEST_F(NaviHost, tap_hold_tap_stays_down_the_tap_length) {
+    EXPECT_EQ(play({"+1", "-1"}), "Q -");
+    EXPECT_GE(report_times[1] - report_times[0], 30u);
+}
+
+// A plain key's tap isn't held back
+TEST_F(NaviHost, plain_key_tap_is_not_held_back) {
+    EXPECT_EQ(play({"+2", "-2"}), "C -");
+    EXPECT_LT(report_times[1] - report_times[0], 30u);
 }

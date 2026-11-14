@@ -291,7 +291,7 @@ export function optionsHostProject(): Project {
   put(1, 6, taskSwitcherKeycode(spec)); // the task switcher key, on layer 1 (hold 3)
   return {
     ...p,
-    firmware: { ...p.firmware, oneShotCancel: true },
+    firmware: { ...p.firmware, oneShotCancel: true, tapHoldTapMs: 30 },
     // Spots: 5 (E; layer 1: A), 13 (N) and 39 (S, the last row)
     tapHolds: [{ id: 'th-q', keycodes: [q('LGUI_T(KC_Q)')], holdOnSpots: [{ row: 0, col: 5 }, { row: 1, col: 3 }, { row: 3, col: 9 }] }],
   };
