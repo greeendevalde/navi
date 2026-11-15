@@ -9,6 +9,7 @@ import { effectiveTapHoldActions } from '../project/tapHoldActions';
 import { activeTapDanceKeycodes, tapDanceSends } from '../project/tapDances';
 import type { FeatureId } from './registry';
 import { playedKeycodes, playsAsKey } from '../qmk/playKey';
+import { tapLengthActive } from '../qmk/tapLength';
 
 export function requiredFeatures(project: Project, keymap: Keymap, spec: KeycodeSpec): Map<FeatureId, string> {
   const need = new Map<FeatureId, string>();
@@ -39,6 +40,8 @@ export function requiredFeatures(project: Project, keymap: Keymap, spec: Keycode
   const played = playedKeycodes(project).filter(playsAsKey);
   if (played.length) add('repeat_key', 'keys NAVI plays as key events');
   for (const v of played) keycodeNeeds(spec, v, { unicode: project.firmware.unicode }).forEach((n) => add(pick(n), 'keys NAVI plays as key events'));
+  // The tap length keeps a tap's release with record->keycode set, so it acts as the key it was (qmk/tapLength.ts).
+  if (tapLengthActive(spec, project)) add('repeat_key', 'tap-hold tap length');
   if (project.combos.length) add('combo', 'combos');
   if (project.keyOverrides.length) add('key_override', 'key overrides');
   if (keymap.layers.some((l) => l.encoders.length)) add('encoder_map', 'encoders');

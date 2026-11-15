@@ -285,6 +285,7 @@ export function optionsHostProject(): Project {
   put(0, 4, q('OSM(MOD_LSFT)'));
   put(0, 5, q('KC_E'));
   put(0, 6, q('KC_X'));
+  put(0, 7, q('KC_Q'));
   put(0, 13, q('KC_N'));
   put(0, 39, q('KC_S'));
   put(1, 5, q('KC_A'));

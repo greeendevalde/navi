@@ -1,6 +1,7 @@
 // Hold spots, the one-shot cancel and the tap-hold tap length, 30 ms (fixture.test.ts → optionsHostProject). Positions (n = row * 10 + col):
 //   0 LT(1, KC_SPC)   1 LGUI_T(KC_Q): holds when a key at 5, 13 or 39 is pressed   2 KC_C   3 MO(1)
-//   4 OSM(MOD_LSFT), a second tap cancels it   5 KC_E (layer 1: KC_A)   6 KC_X (layer 1: the task switcher key)   13 KC_N   39 KC_S
+//   4 OSM(MOD_LSFT), a second tap cancels it   5 KC_E (layer 1: KC_A)   6 KC_X (layer 1: the task switcher key)   7 KC_Q
+//   13 KC_N   39 KC_S
 #include "../navi_host.hpp"
 
 // A press at a spot makes the tap-hold key a hold at once, whatever the key types there
@@ -16,8 +17,9 @@ TEST_F(NaviHost, hold_spot_counts_by_position_not_by_keycode_on_another_layer) {
     EXPECT_EQ(play({"+3", "+1", "+5", "-5", "-1", "-3"}), "LGUI LGUI+A LGUI -");
 }
 
+// (Q's tap stays down the 30 ms tap length, past C's release)
 TEST_F(NaviHost, key_outside_the_spots_rolled_in_still_taps) {
-    EXPECT_EQ(play({"+1", "+2", "-1", "-2"}), "Q Q+C C -");
+    EXPECT_EQ(play({"+1", "+2", "-1", "-2"}), "Q Q+C Q -");
 }
 
 // QMK's replay trap: the tap-hold key's press and release wait behind the undecided layer-tap
@@ -26,7 +28,7 @@ TEST_F(NaviHost, hold_spot_rolled_behind_an_undecided_layer_tap_holds) {
 }
 
 TEST_F(NaviHost, key_outside_the_spots_rolled_behind_an_undecided_layer_tap_still_taps) {
-    EXPECT_EQ(play({"+0", "+1", "+2", "-1", "-2", "wait", "-0"}), "Q Q+C C -");
+    EXPECT_EQ(play({"+0", "+1", "+2", "-1", "-2", "wait", "-0"}), "Q Q+C Q -");
 }
 
 // A second tap of a one-shot mod cancels it
@@ -73,6 +75,24 @@ TEST_F(NaviHost, task_switcher_pick_goes_before_a_key_pressed_while_it_waits) {
 TEST_F(NaviHost, tap_hold_tap_stays_down_the_tap_length) {
     EXPECT_EQ(play({"+1", "-1"}), "Q -");
     EXPECT_GE(report_times[1] - report_times[0], 30u);
+}
+
+// The board keeps reading keys while a tap is held down: a key pressed meanwhile goes out at once, so keys pressed
+// during the tap length keep their order (a blocking wait read them all in one scan, in matrix order: "rea" -> "rae")
+TEST_F(NaviHost, tap_length_keeps_reading_keys) {
+    EXPECT_EQ(play({"+1", "-1", "+2", "-2"}), "Q Q+C Q -");
+    EXPECT_LT(report_times[1] - report_times[0], 10u);
+    EXPECT_GE(report_times[3] - report_times[0], 30u);
+}
+
+// The same key pressed again during the tap length: the first tap's release goes out first, so both taps type
+TEST_F(NaviHost, tap_length_same_key_again_lets_the_first_tap_go) {
+    EXPECT_EQ(play({"+1", "-1", "+1", "-1"}), "Q - Q -");
+}
+
+// Another key typing the same letter during the tap length: the tap's release goes out first, so it types twice
+TEST_F(NaviHost, tap_length_same_letter_on_another_key_lets_the_tap_go) {
+    EXPECT_EQ(play({"+1", "-1", "+7", "-7"}), "Q - Q -");
 }
 
 // A plain key's tap isn't held back

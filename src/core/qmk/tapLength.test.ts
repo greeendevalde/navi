@@ -39,13 +39,17 @@ describe('tap-hold tap length: generated C', () => {
     expect(keymapC(p)).toContain('#define NAVI_TAP_HOLD_TAP_MS 30');
   });
 
-  it('set: waits on the tap release, first thing in process_record', () => {
-    const c = keymapC(project(30));
+  it('set: holds the tap release back first thing in process_record, lets it go from housekeeping_task', () => {
+    const p = project(30);
+    const files = generateKeymap({ project: p, keymap: activeKeymap(p), spec, via: false, encoderCount: 0 }).files;
+    const c = files.find((f) => f.name === 'keymap.c')!.text;
     expect(c).toContain('#define NAVI_TAP_HOLD_TAP_MS 30');
     const hook = c.slice(c.indexOf('bool process_record_user('));
-    const firstLine = hook.split('\n')[1];
-    expect(firstLine).toContain("A tap-hold key's tap stays down");
-    expect(hook).toContain('wait_ms(NAVI_TAP_HOLD_TAP_MS - down);');
+    expect(hook.split('\n')[1]).toContain("A tap-hold key's tap stays down");
+    expect(hook.split('\n')[2]).toContain('if (!navi_tap_length(keycode, record)) return false;');
+    expect(c.slice(c.indexOf('void housekeeping_task_user('))).toContain('navi_tap_waits_task();');
+    // record->keycode, which the held-back release is pinned to, needs REPEAT_KEY_ENABLE
+    expect(files.find((f) => f.name === 'rules.mk')!.text).toMatch(/REPEAT_KEY_ENABLE = yes/);
   });
 });
 

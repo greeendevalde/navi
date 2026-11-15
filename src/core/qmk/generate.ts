@@ -23,7 +23,7 @@ import { BOOTLOADER_HELPER_C, rawHidHookC, rawHidPipelineHookC } from './bootloa
 import { boardFitIssues, comboCountEventCode, KEY_COUNTS_LINES, KEY_COUNTS_RECORD_LINE, keyCountsCode, keyCountsConfig, keyCountsDecl, keyCountsPlan, keyCountsRecordCode, keyCountsSuspendCode, USER_EEPROM_RE, type KeyCountsLayout } from './keyCounts';
 import { LIFT_HELPERS_C, LIFT_SYMBOLS, liftedBlock, liftedLine, liftOf, liftSetting } from './heldMods';
 import { oneShotCancelActive, oneShotCancelIssues, oneShotCancelLines, oneShotCancelState } from './oneShotCancel';
-import { tapLengthActive, tapLengthLines, tapLengthState } from './tapLength';
+import { TAP_LENGTH_HOUSEKEEPING, tapLengthActive, tapLengthLines, tapLengthState } from './tapLength';
 import { layerOnTopCallback, layerOnTopState, layerOnTopStubs } from './layerOnTop';
 import { languageDecl, languageEarlyCode, languageKeyName, languagePrototypes, languageRecordLines, languageSwitchCode, languageSymbolCode, languageViaMacroLines, LANGUAGE_SYMBOLS, planLanguages, routedMacroStatements, ROUTE_UNICODE_MODE } from './languages';
 import { checkLanguages, languageCName } from '../project/languages';
@@ -462,6 +462,7 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
     h.push('//   void housekeeping_task_user(void) { housekeeping_task_navi(); }');
     h.push('// With “layer keys bring their layer to the top” on, process_record_navi must also see layer key releases');
     h.push('// (call it before anything in process_record_user can return false).');
+    if (tapLengthActive(spec, project)) h.push("// A tap-hold tap's release it returns false for (the tap length) comes back through process_record once its time is up:", '// code before process_record_navi sees that release twice.');
     h.push('// Your own keycodes start at NAVI_SAFE_RANGE: enum my_keycodes { MY_KEY = NAVI_SAFE_RANGE, ... };');
     h.push('#pragma once');
     h.push('');
@@ -764,7 +765,7 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
   const osCancel = oneShotCancelActive(project);
   if (osCancel) c.push(...oneShotCancelState());
   const tapLength = tapLengthActive(spec, project);
-  if (tapLength) c.push(...tapLengthState(project.firmware.tapHoldTapMs));
+  if (tapLength) c.push(...tapLengthState(project.firmware.tapHoldTapMs, thActions.length > 0, replay));
   // Indicator LEDs: worked out on every housekeeping pass; toggle keys seen in process_record.
   const ledsOn = writtenLeds(project.firmware.indicatorLeds).length > 0;
   if (ledsOn) c.push(...indicatorLedCode({ leds: project.firmware.indicatorLeds, layersOn: layersOnTop || pipeline ? 'navi_layers_on()' : 'layer_state' }));
@@ -786,7 +787,7 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
   }
   if (recordHook) {
     c.push(`bool ${hookName('process_record_user')}(uint16_t keycode, keyrecord_t *record) {`);
-    if (tapLength) c.push(...tapLengthLines()); // first: nothing else may send the tap's release before the wait
+    if (tapLength) c.push(...tapLengthLines()); // first: nothing else may send the tap's release before it's held back
     if (counts) c.push(KEY_COUNTS_RECORD_LINE);
     if (leaderPass) c.push(...leaderPassLines(leaders, kc));
     c.push(...ledRecord);
@@ -849,8 +850,8 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
     c.push('}');
     c.push('');
   }
-  // housekeeping_task: one function shared by the indicator LEDs and the task switcher key.
-  const housekeeping = [...(ledsOn ? [LED_HOUSEKEEPING_LINE] : []), ...(switcher ? taskSwitcherHousekeeping() : []), ...(board ? [KEY_COUNTS_LINES.housekeeping] : [])];
+  // housekeeping_task: one function shared by the tap length, the indicator LEDs, the task switcher key and key counts.
+  const housekeeping = [...(tapLength ? [TAP_LENGTH_HOUSEKEEPING] : []), ...(ledsOn ? [LED_HOUSEKEEPING_LINE] : []), ...(switcher ? taskSwitcherHousekeeping() : []), ...(board ? [KEY_COUNTS_LINES.housekeeping] : [])];
   if (housekeeping.length) c.push(`void ${hookName('housekeeping_task_user')}(void) {`, ...housekeeping, '}', '');
   if (board) c.push(...keyCountsSuspendCode(hookName('suspend_power_down_user')));
 
@@ -866,7 +867,7 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
     process_record_user: recordHook,
     layer_state_set_user: layersOnTop || !!lang?.layers,
     keyboard_post_init_user: postInit.length > 0,
-    housekeeping_task_user: ledsOn || switcher || board,
+    housekeeping_task_user: ledsOn || switcher || board || tapLength,
     suspend_power_down_user: board,
     get_tapping_term: tappingTerms,
     get_quick_tap_term: quickTap,
@@ -1132,7 +1133,7 @@ export function generateKeymap({ project: given, keymap, spec, via, encoderCount
   if (!pipeline && leaders.length) generatedSymbols.add('leader_end_user');
   if (!pipeline && hookUsed.layer_state_set_user) generatedSymbols.add('layer_state_set_user');
   if (!pipeline && hookUsed.keyboard_post_init_user) generatedSymbols.add('keyboard_post_init_user');
-  if (!pipeline && (ledsOn || board)) generatedSymbols.add('housekeeping_task_user');
+  if (!pipeline && (ledsOn || board || tapLength)) generatedSymbols.add('housekeeping_task_user');
   if (!pipeline && board) generatedSymbols.add('suspend_power_down_user');
   if (counts) for (const name of KEY_COUNT_SYMBOLS) generatedSymbols.add(name);
   if (pipeline || ledsOn) for (const name of LED_SYMBOLS) generatedSymbols.add(name);
